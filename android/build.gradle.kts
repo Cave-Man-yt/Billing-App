@@ -19,6 +19,9 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+// Ensure library modules have a namespace (some plugins may be missing it).
+// Using plugin/module defaults; no injection here.
+
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }

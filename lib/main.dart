@@ -1,37 +1,50 @@
 import 'package:flutter/material.dart';
-import 'data/datasources/local_database_helper.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'providers/bill_provider.dart';
+import 'providers/customer_provider.dart';
+import 'providers/product_provider.dart';
+import 'providers/settings_provider.dart';
+import 'screens/home_screen.dart';
+import 'utils/app_theme.dart';
+import 'services/database_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Test Database - FIXED
-  final dbHelper = LocalDatabaseHelper();
-  final db = await dbHelper.database;
-  final products = await db.query('products');  // ✅ Added await
-  print('✅ Database ready: ${products.length} products');
+  // Force landscape orientation for tablet
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.landscapeRight,
+    DeviceOrientation.landscapeLeft,
+  ]);
   
-  runApp(const MyApp());
+  // Initialize database
+  await DatabaseService.instance.database;
+  
+  runApp(const WholesaleBillingApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class WholesaleBillingApp extends StatelessWidget {
+  const WholesaleBillingApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Billing App',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
-        useMaterial3: true,
-      ),
-      home: const Scaffold(
-        body: Center(
-          child: Text(
-            'Database Ready!\nCheck console for ✅\nSay "db ready"',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-        ),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => SettingsProvider()),
+        ChangeNotifierProvider(create: (_) => CustomerProvider()),
+        ChangeNotifierProvider(create: (_) => ProductProvider()),
+        ChangeNotifierProvider(create: (_) => BillProvider()),
+      ],
+      child: Consumer<SettingsProvider>(
+        builder: (context, settings, _) {
+          return MaterialApp(
+            title: 'Wholesale Billing',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.lightTheme,
+            home: const HomeScreen(),
+          );
+        },
       ),
     );
   }
