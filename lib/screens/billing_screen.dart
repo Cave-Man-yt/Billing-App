@@ -11,6 +11,7 @@ import '../models/bill_model.dart';
 import '../utils/app_theme.dart';
 import '../widgets/customer_selector.dart';
 import '../services/pdf_service.dart';
+import 'package:printing/printing.dart';
 
 class BillingScreen extends StatefulWidget {
   const BillingScreen({super.key});
@@ -142,103 +143,88 @@ class _BillingScreenState extends State<BillingScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Consumer<BillProvider>(
-          builder: (context, billProvider, _) {
-            if (billProvider.isEditingExistingBill && billProvider.editingBillId != null) {
-              final originalBill = billProvider.bills.firstWhere(
-                (b) => b.id == billProvider.editingBillId,
-                orElse: () => Bill(
-                  billNumber: 'Unknown',
-                  customerName: '',
-                  subtotal: 0.0,
-                  discount: 0.0,
-                  total: 0.0,
-                ),
-              );
-              return Text('Edit Bill - ${originalBill.billNumber}');
-            }
-            return const Text('New Estimate');
-          },
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.share_outlined),
-            onPressed: () async {
-              final billProvider = Provider.of<BillProvider>(context, listen: false);
-              if (billProvider.currentBillItems.isEmpty || billProvider.currentCustomer == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Add customer & items first')),
-                );
-                return;
-              }
-              final items = List<BillItem>.from(billProvider.currentBillItems);
-              final previewBill = Bill(
-                billNumber: billProvider.generateBillNumber(),
-                customerId: billProvider.currentCustomer!.id,
-                customerName: billProvider.currentCustomer!.name,
-                customerCity: billProvider.currentCustomer!.city,
-                isCredit: false,
-                previousBalance: billProvider.currentCustomer!.balance,
-                subtotal: billProvider.subtotal,
-                discount: billProvider.discount,
-                total: billProvider.total,
-                amountPaid: 0.0,
-                newBalance: (billProvider.total + billProvider.currentCustomer!.balance) - 0.0,
-                grandTotal: billProvider.total + billProvider.currentCustomer!.balance,
-              );
-              await PdfService.shareBill(context, previewBill, items, filename: '${previewBill.billNumber}.pdf');
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.print),
-            onPressed: () async {
-              final billProvider = Provider.of<BillProvider>(context, listen: false);
-              if (billProvider.currentBillItems.isEmpty || billProvider.currentCustomer == null) return;
-              final items = List<BillItem>.from(billProvider.currentBillItems);
-              final previewBill = Bill(
-                billNumber: billProvider.generateBillNumber(),
-                customerId: billProvider.currentCustomer!.id,
-                customerName: billProvider.currentCustomer!.name,
-                customerCity: billProvider.currentCustomer!.city,
-                isCredit: false,
-                previousBalance: billProvider.currentCustomer!.balance,
-                subtotal: billProvider.subtotal,
-                discount: billProvider.discount,
-                total: billProvider.total,
-                amountPaid: 0.0,
-                newBalance: (billProvider.total + billProvider.currentCustomer!.balance) - 0.0,
-                grandTotal: billProvider.total + billProvider.currentCustomer!.balance,
-              );
-              await PdfService.generateAndPrintBill(context, previewBill, items);
-            },
-          ),
-          Consumer<BillProvider>(
-            builder: (context, billProvider, _) => IconButton(
-              icon: const Icon(Icons.delete_outline),
-              onPressed: billProvider.currentBillItems.isEmpty
-                  ? null
-                  : () {
-                      billProvider.clearCurrentBill();
-                      _discountController.clear();
-                      _amountPaidController.text = '0.0';
-                    },
-              tooltip: 'Clear Estimate',
-            ),
-          ),
-        ],
-      ),
-      body: Row(
-        children: [
-          Expanded(flex: 4, child: _buildItemEntrySection()),
-          Expanded(flex: 6, child: _buildPreviewSection()),
-        ],
+  Future<void> _shareViaWhatsApp() async {
+  final billProvider = Provider.of<BillProvider>(context, listen: false);
+
+  if (billProvider.currentBillItems.isEmpty || billProvider.currentCustomer == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Add customer & items first')),
+    );
+    return;
+  }
+
+  setState(() => _isProcessing = true);
+
+  try {
+    final amountPaidText = _amountPaidController.text.trim();
+    final amountPaid = amountPaidText.isEmpty ? 0.0 : (double.tryParse(amountPaidText) ?? 0.0);
+
+    final itemsCopy = List<BillItem>.from(billProvider.currentBillItems);
+    final bill = await billProvider.saveBill(amountPaid, clearAfterSave: false);
+
+    if (bill == null || !mounted) return;
+
+    // Use public method — no need to access private _buildPdfBytes
+    await PdfService.shareBill(
+      context,
+      bill,
+      itemsCopy,
+      filename: '${bill.billNumber}.pdf',
+    );
+
+    billProvider.clearCurrentBill();
+    _discountController.clear();
+    _amountPaidController.clear();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Bill saved & sent to WhatsApp!'),
+        backgroundColor: AppTheme.successColor,
       ),
     );
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.errorColor),
+      );
+    }
+  } finally {
+    if (mounted) setState(() => _isProcessing = false);
   }
+}
+
+  @override
+Widget build(BuildContext context) {
+  return Scaffold(
+    appBar: AppBar(
+      title: Consumer<BillProvider>(
+        builder: (context, billProvider, _) {
+          if (billProvider.isEditingExistingBill && billProvider.editingBillId != null) {
+            final originalBill = billProvider.bills.firstWhere(
+              (b) => b.id == billProvider.editingBillId,
+              orElse: () => Bill(
+                billNumber: 'Unknown',
+                customerName: '',
+                subtotal: 0.0,
+                discount: 0.0,
+                total: 0.0,
+              ),
+            );
+            return Text('Edit Bill - ${originalBill.billNumber}');
+          }
+          return const Text('New Estimate');
+        },
+      ),
+      actions: [],
+    ),
+    body: Row(
+      children: [
+        Expanded(flex: 4, child: _buildItemEntrySection()),
+        Expanded(flex: 6, child: _buildPreviewSection()),
+      ],
+    ),
+  );
+}
 
   Widget _buildItemEntrySection() {
     return Container(
@@ -427,72 +413,95 @@ class _BillingScreenState extends State<BillingScreen> {
   }
 
   Widget _buildSummarySection() {
-    return Consumer<BillProvider>(
-      builder: (context, billProvider, _) {
-        return Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: AppTheme.backgroundLight,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 8,
-                offset: const Offset(0, -2),
+  return Consumer<BillProvider>(
+    builder: (context, billProvider, _) {
+      final canSave = billProvider.currentBillItems.isNotEmpty && billProvider.currentCustomer != null;
+
+      return Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: AppTheme.backgroundLight,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              TextField(
+                controller: _discountController,
+                decoration: const InputDecoration(
+                  labelText: 'Discount (₹)',
+                  prefixIcon: Icon(Icons.local_offer_outlined),
+                ),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
               ),
-            ],
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                TextField(
-                  controller: _discountController,
-                  decoration: const InputDecoration(
-                    labelText: 'Discount (₹)',
-                    prefixIcon: Icon(Icons.local_offer_outlined),
-                  ),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+              const SizedBox(height: 16),
+              TextField(
+                controller: _amountPaidController,
+                decoration: const InputDecoration(
+                  labelText: 'Amount Paid (₹)',
+                  hintText: '0.00',
+                  prefixIcon: Icon(Icons.payment),
                 ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _amountPaidController,
-                  decoration: const InputDecoration(
-                    labelText: 'Amount Paid (₹)',
-                    hintText: '0.00',
-                    prefixIcon: Icon(Icons.payment),
-                  ),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
-                ),
-                const SizedBox(height: 16),
-                _summaryRow('Subtotal:', '₹${billProvider.subtotal.toStringAsFixed(2)}'),
-                if (billProvider.discount > 0)
-                  _summaryRow('Discount:', '-₹${billProvider.discount.toStringAsFixed(2)}', color: AppTheme.successColor),
-                const Divider(height: 32),
-                _summaryRow('TOTAL:', '₹${billProvider.total.toStringAsFixed(2)}', isBold: true, fontSize: 24),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: (billProvider.currentBillItems.isEmpty || _isProcessing) ? null : _completeAndPrint,
-                    icon: _isProcessing
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Icon(Icons.print),
-                    label: _isProcessing ? const Text('PROCESSING...') : const Text('COMPLETE & PRINT'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+              ),
+              const SizedBox(height: 16),
+              _summaryRow('Subtotal:', '₹${billProvider.subtotal.toStringAsFixed(2)}'),
+              if (billProvider.discount > 0)
+                _summaryRow('Discount:', '-₹${billProvider.discount.toStringAsFixed(2)}', color: AppTheme.successColor),
+              const Divider(height: 32),
+              _summaryRow('TOTAL:', '₹${billProvider.total.toStringAsFixed(2)}', isBold: true, fontSize: 24),
+              const SizedBox(height: 32),
+
+              // BIG ACTION BUTTONS
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: canSave && !_isProcessing ? () => _shareViaWhatsApp() : null,
+                      icon: _isProcessing
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white))
+                          : const Icon(Icons.send, size: 28),
+                      label: const Text('SEND TO WHATSAPP', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green[700],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 32),
-              ],
-            ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: canSave && !_isProcessing ? _completeAndPrint : null,
+                      icon: _isProcessing
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white))
+                          : const Icon(Icons.print, size: 28),
+                      label: const Text('PRINT', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 32),
+            ],
           ),
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
+}
 
   Widget _summaryRow(String label, String value, {Color? color, bool isBold = false, double? fontSize}) {
     return Padding(
