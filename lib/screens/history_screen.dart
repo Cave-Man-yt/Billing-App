@@ -1,12 +1,13 @@
 // lib/screens/history_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import 'package:billing_app/providers/bill_provider.dart';
-import 'package:billing_app/models/bill_model.dart';
-import 'package:billing_app/utils/app_theme.dart';
-import 'package:billing_app/services/pdf_service.dart';
+import '../providers/bill_provider.dart';
+import '../models/bill_model.dart';
+import '../utils/app_theme.dart';
+import '../services/pdf_service.dart';
+import '../services/database_service.dart';  // ← For delete
+import 'billing_screen.dart';  // ← To push editing screen (reuse BillingScreen)
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -35,10 +36,56 @@ class _HistoryScreenState extends State<HistoryScreen> {
   void _searchBills(String query) async {
     final billProvider = Provider.of<BillProvider>(context, listen: false);
     final results = await billProvider.searchBills(query);
-    setState(() {
-      _filteredBills = results;
-    });
+    if (mounted) {
+      setState(() {
+        _filteredBills = results;
+      });
+    }
   }
+
+  Future<void> _deleteBill(int billId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Bill'),
+        content: const Text('Are you sure you want to delete this bill? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      await DatabaseService.instance.deleteBill(billId);
+      final billProvider = Provider.of<BillProvider>(context, listen: false);
+      await billProvider.loadBills();
+      _loadBills();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bill deleted successfully')),
+      );
+    }
+  }
+
+  Future<void> _openBillForEditing(Bill bill) async {
+    final billProvider = Provider.of<BillProvider>(context, listen: false);
+    final items = await billProvider.getBillItems(bill.id!);
+
+    if (!mounted) return;
+
+    // Load data
+    billProvider.loadBillForEditing(bill, items);
+    // Set editing mode
+    billProvider.startEditingExistingBill(bill.id!);
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const BillingScreen()),
+    ).then((_) {
+      billProvider.loadBills();
+      _loadBills();
+    });
+}
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +104,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ),
       body: Column(
         children: [
-          // Search bar
           Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(
@@ -69,38 +115,27 @@ class _HistoryScreenState extends State<HistoryScreen> {
               onChanged: _searchBills,
             ),
           ),
-          
-          // Bills list
           Expanded(
             child: Consumer<BillProvider>(
               builder: (context, billProvider, _) {
                 if (billProvider.isLoading) {
                   return const Center(child: CircularProgressIndicator());
                 }
-
                 if (_filteredBills.isEmpty) {
                   return const Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.receipt_long_outlined,
-                          size: 80,
-                          color: AppTheme.textHint,
-                        ),
+                        Icon(Icons.receipt_long_outlined, size: 80, color: AppTheme.textHint),
                         SizedBox(height: 16),
                         Text(
                           'No bills found',
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: AppTheme.textSecondary,
-                          ),
+                          style: TextStyle(fontSize: 18, color: AppTheme.textSecondary),
                         ),
                       ],
                     ),
                   );
                 }
-
                 return ListView.builder(
                   padding: const EdgeInsets.all(16),
                   itemCount: _filteredBills.length,
@@ -108,10 +143,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     final bill = _filteredBills[index];
                     return Card(
                       child: ListTile(
+                        onTap: () => _openBillForEditing(bill),  // ← Tap to edit
+                        onLongPress: () => _deleteBill(bill.id!),  // ← Long press delete
                         leading: CircleAvatar(
-                          backgroundColor: bill.isCredit
-                              ? AppTheme.creditColor
-                              : AppTheme.accentColor,
+                          backgroundColor: bill.isCredit ? AppTheme.creditColor : AppTheme.accentColor,
                           child: Icon(
                             bill.isCredit ? Icons.credit_card : Icons.receipt,
                             color: Colors.white,
@@ -157,7 +192,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               tooltip: 'Share PDF',
                               onPressed: () async {
                                 final items = await billProvider.getBillItems(bill.id!);
-                                if (!context.mounted) return;
+                                if (!mounted) return;
                                 await PdfService.shareBill(context, bill, items, filename: '${bill.billNumber}.pdf');
                               },
                             ),
@@ -166,22 +201,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               tooltip: 'Print',
                               onPressed: () async {
                                 final items = await billProvider.getBillItems(bill.id!);
-                                if (!context.mounted) return;
+                                if (!mounted) return;
                                 await PdfService.generateAndPrintBill(context, bill, items);
                               },
                             ),
                           ],
                         ),
-                        onTap: () async {
-                          final items = await billProvider.getBillItems(bill.id!);
-                          if (context.mounted) {
-                            await PdfService.generateAndPrintBill(
-                              context,
-                              bill,
-                              items,
-                            );
-                          }
-                        },
                       ),
                     );
                   },

@@ -16,7 +16,6 @@ class BillItem {
 
   Map<String, dynamic> toMap(int billId) {
     return {
-      'id': id,
       'bill_id': billId,
       'product_name': productName,
       'quantity': quantity,

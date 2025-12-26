@@ -1,27 +1,51 @@
 // lib/screens/customers_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:billing_app/providers/customer_provider.dart';
-import 'package:billing_app/models/customer_model.dart';
-import 'package:billing_app/utils/app_theme.dart';
 
+import '../providers/customer_provider.dart';
+import '../models/customer_model.dart';
+import '../utils/app_theme.dart';
+import 'package:billing_app/services/database_service.dart';
+
+// Replace the entire CustomersScreen class in lib/screens/customers_screen.dart with this (adds long press delete)
 class CustomersScreen extends StatelessWidget {
   const CustomersScreen({super.key});
 
   void _showAddCustomerDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => const AddCustomerDialog(),
+      builder: (_) => const AddCustomerDialog(),
     );
   }
 
   void _showEditBalanceDialog(BuildContext context, Customer customer) {
     showDialog(
       context: context,
-      builder: (context) => EditBalanceDialog(customer: customer),
+      builder: (_) => EditBalanceDialog(customer: customer),
     );
+  }
+
+  Future<void> _deleteCustomer(BuildContext context, Customer customer) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Customer'),
+        content: const Text('Are you sure you want to delete this customer? This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await DatabaseService.instance.deleteCustomer(customer.id!);
+      final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+      await customerProvider.loadCustomers();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Customer deleted')),
+      );
+    }
   }
 
   @override
@@ -32,9 +56,8 @@ class CustomersScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () {
-              Provider.of<CustomerProvider>(context, listen: false).loadCustomers();
-            },
+            onPressed: () =>
+                Provider.of<CustomerProvider>(context, listen: false).loadCustomers(),
           ),
         ],
       ),
@@ -48,38 +71,42 @@ class CustomersScreen extends StatelessWidget {
           if (customerProvider.isLoading) {
             return const Center(child: CircularProgressIndicator());
           }
-
           if (customerProvider.customers.isEmpty) {
             return const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.people_outline, size: 80, color: AppTheme.textHint),
+                  Icon(Icons.people_outline,
+                      size: 80, color: AppTheme.textHint),
                   SizedBox(height: 16),
-                  Text('No customers yet', style: TextStyle(fontSize: 18, color: AppTheme.textSecondary)),
+                  Text('No customers yet',
+                      style:
+                          TextStyle(fontSize: 18, color: AppTheme.textSecondary)),
                 ],
               ),
             );
           }
-
           return ListView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: customerProvider.customers.length,
             itemBuilder: (context, index) {
               final customer = customerProvider.customers[index];
               final hasBalance = customer.balance > 0;
-
               return Card(
                 child: ListTile(
                   onTap: () => _showEditBalanceDialog(context, customer),
+                  onLongPress: () => _deleteCustomer(context, customer),  // ← NEW: Long press to delete
                   leading: CircleAvatar(
-                    backgroundColor: hasBalance ? AppTheme.warningColor : AppTheme.accentColor,
+                    backgroundColor:
+                        hasBalance ? AppTheme.warningColor : AppTheme.accentColor,
                     child: Text(
                       customer.name[0].toUpperCase(),
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold),
                     ),
                   ),
-                  title: Text(customer.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  title: Text(customer.name,
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -88,15 +115,15 @@ class CustomersScreen extends StatelessWidget {
                         Text(
                           'Balance: ₹${customer.balance.toStringAsFixed(2)}',
                           style: const TextStyle(
-                            color: AppTheme.warningColor,
-                            fontWeight: FontWeight.w600,
-                          ),
+                              color: AppTheme.warningColor,
+                              fontWeight: FontWeight.w600),
                         ),
                     ],
                   ),
                   isThreeLine: hasBalance,
                   trailing: hasBalance
-                      ? const Icon(Icons.account_balance_wallet, color: AppTheme.warningColor)
+                      ? const Icon(Icons.account_balance_wallet,
+                          color: AppTheme.warningColor)
                       : null,
                 ),
               );
@@ -116,9 +143,9 @@ class AddCustomerDialog extends StatefulWidget {
 }
 
 class _AddCustomerDialogState extends State<AddCustomerDialog> {
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _cityController = TextEditingController();
-  final TextEditingController _balanceController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _cityController = TextEditingController();
+  final _balanceController = TextEditingController();
 
   Future<void> _addCustomer() async {
     if (_nameController.text.trim().isEmpty) {
@@ -130,22 +157,22 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
 
     final customer = Customer(
       name: _nameController.text.trim(),
-      city: _cityController.text.trim().isEmpty ? null : _cityController.text.trim(),
+      city:
+          _cityController.text.trim().isEmpty ? null : _cityController.text.trim(),
       balance: double.tryParse(_balanceController.text) ?? 0.0,
     );
 
-    final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
-    await customerProvider.addCustomer(customer);
+    await Provider.of<CustomerProvider>(context, listen: false)
+        .addCustomer(customer);
 
-    if (mounted) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+    if (!mounted) return;
+
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
           content: Text('Customer added successfully'),
-          backgroundColor: AppTheme.successColor,
-        ),
-      );
-    }
+          backgroundColor: AppTheme.successColor),
+    );
   }
 
   @override
@@ -168,7 +195,7 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
             ),
             const SizedBox(height: 16),
             TextField(
-              control// File: lib/providers/bill_ler: _cityController,
+              controller: _cityController,
               decoration: const InputDecoration(
                 labelText: 'City',
                 prefixIcon: Icon(Icons.location_city),
@@ -185,7 +212,7 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
               ),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))
               ],
             ),
           ],
@@ -193,13 +220,8 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _addCustomer,
-          child: const Text('Add'),
-        ),
+            onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        ElevatedButton(onPressed: _addCustomer, child: const Text('Add')),
       ],
     );
   }
@@ -215,7 +237,6 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
 
 class EditBalanceDialog extends StatefulWidget {
   final Customer customer;
-
   const EditBalanceDialog({super.key, required this.customer});
 
   @override
@@ -223,13 +244,8 @@ class EditBalanceDialog extends StatefulWidget {
 }
 
 class _EditBalanceDialogState extends State<EditBalanceDialog> {
-  final TextEditingController _balanceController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _balanceController.text = widget.customer.balance.toString();
-  }
+  late final _balanceController = TextEditingController(
+      text: widget.customer.balance.toStringAsFixed(2));
 
   Future<void> _updateBalance() async {
     final newBalance = double.tryParse(_balanceController.text) ?? 0.0;
@@ -239,18 +255,17 @@ class _EditBalanceDialogState extends State<EditBalanceDialog> {
       updatedAt: DateTime.now(),
     );
 
-    final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
-    await customerProvider.updateCustomer(updatedCustomer);
+    await Provider.of<CustomerProvider>(context, listen: false)
+        .updateCustomer(updatedCustomer);
 
-    if (mounted) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+    if (!mounted) return;
+
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
           content: Text('Balance updated successfully'),
-          backgroundColor: AppTheme.successColor,
-        ),
-      );
-    }
+          backgroundColor: AppTheme.successColor),
+    );
   }
 
   @override
@@ -262,10 +277,8 @@ class _EditBalanceDialogState extends State<EditBalanceDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              widget.customer.city ?? 'No city',
-              style: const TextStyle(color: AppTheme.textSecondary),
-            ),
+            Text(widget.customer.city ?? 'No city',
+                style: const TextStyle(color: AppTheme.textSecondary)),
             const SizedBox(height: 24),
             TextField(
               controller: _balanceController,
@@ -275,7 +288,7 @@ class _EditBalanceDialogState extends State<EditBalanceDialog> {
               ),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))
               ],
               autofocus: true,
             ),
@@ -288,13 +301,13 @@ class _EditBalanceDialogState extends State<EditBalanceDialog> {
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.info_outline, color: AppTheme.warningColor, size: 20),
+                  Icon(Icons.info_outline,
+                      color: AppTheme.warningColor, size: 20),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'This will set the customer\'s current balance',
-                      style: TextStyle(fontSize: 12),
-                    ),
+                        'This will set the customer\'s current outstanding balance',
+                        style: TextStyle(fontSize: 12)),
                   ),
                 ],
               ),
@@ -304,13 +317,8 @@ class _EditBalanceDialogState extends State<EditBalanceDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _updateBalance,
-          child: const Text('Update'),
-        ),
+            onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        ElevatedButton(onPressed: _updateBalance, child: const Text('Update')),
       ],
     );
   }

@@ -48,6 +48,23 @@ class DatabaseService {
         } catch (e) {
           // ignore migration errors; table may not exist yet
         }
+        // Ensure bills table contains expected optional columns (customer_city etc.)
+        try {
+          final billCols = await db.rawQuery("PRAGMA table_info(bills);");
+          final billNames = billCols.map((r) => r['name'] as String).toSet();
+          if (!billNames.contains('customer_city')) {
+            await db.execute("ALTER TABLE bills ADD COLUMN customer_city TEXT;");
+          }
+          // If other optional columns were added in newer schema, add them defensively
+          if (!billNames.contains('customer_phone')) {
+            await db.execute("ALTER TABLE bills ADD COLUMN customer_phone TEXT;");
+          }
+          if (!billNames.contains('customer_address')) {
+            await db.execute("ALTER TABLE bills ADD COLUMN customer_address TEXT;");
+          }
+        } catch (e) {
+          // ignore; bills table may not exist yet
+        }
       },
     );
   }
@@ -84,6 +101,7 @@ class DatabaseService {
         bill_number TEXT NOT NULL UNIQUE,
         customer_id INTEGER,
         customer_name TEXT NOT NULL,
+        customer_city TEXT,
         customer_phone TEXT,
         customer_address TEXT,
         is_credit INTEGER NOT NULL DEFAULT 0,
@@ -252,50 +270,60 @@ class DatabaseService {
   // ==================== BILL OPERATIONS ====================
 
   /// Create a new bill with items
-  Future<int> createBill(Bill bill, List<BillItem> items) async {
-    final db = await database;
+  /// Create a new bill with items
+/// If this is called for "editing" an old bill, we create a NEW bill (fresh billId)
+/// Old items are not relevant since we're always creating fresh records
+Future<int> createBill(Bill bill, List<BillItem> items) async {
+  final db = await database;
+  return await db.transaction((txn) async {
+    // Insert the bill row → get fresh billId
+    final billId = await txn.insert('bills', bill.toMap());
 
-    return await db.transaction((txn) async {
-      // Insert bill
-      final billId = await txn.insert('bills', bill.toMap());
+    // NO NEED to delete old items — we're creating a completely new bill
+    // (If you ever implement true "update existing bill", then add delete here)
 
-      // Insert bill items
-      for (var item in items) {
-        await txn.insert('bill_items', item.toMap(billId));
+    // Insert fresh bill items — NEVER pass 'id' so SQLite auto-generates
+    for (var item in items) {
+      await txn.insert(
+        'bill_items',
+        item.toMap(billId),  // ← This must NOT contain 'id' key
+        // Optional: explicitly null out id to be 100% safe
+        // conflictAlgorithm: ConflictAlgorithm.replace, // not needed
+      );
 
-        // Update or insert product using the transaction to avoid DB locks
-        final existing = await txn.query(
+      // Upsert product (fast suggestions + price memory)
+      final existing = await txn.query(
+        'products',
+        where: 'name = ?',
+        whereArgs: [item.productName],
+      );
+
+      if (existing.isNotEmpty) {
+        final existingProduct = Product.fromMap(existing.first);
+        await txn.update(
           'products',
-          where: 'name = ?',
-          whereArgs: [item.productName],
+          {
+            'price': item.price,
+            'last_used': DateTime.now().toIso8601String(),
+            'usage_count': existingProduct.usageCount + 1,
+          },
+          where: 'id = ?',
+          whereArgs: [existingProduct.id],
         );
-
-        if (existing.isNotEmpty) {
-          final existingProduct = Product.fromMap(existing.first);
-          await txn.update(
-            'products',
-            {
-              'price': item.price,
-              'last_used': DateTime.now().toIso8601String(),
-              'usage_count': existingProduct.usageCount + 1,
-            },
-            where: 'id = ?',
-            whereArgs: [existingProduct.id],
-          );
-        } else {
-          await txn.insert('products', Product(
+      } else {
+        await txn.insert(
+          'products',
+          Product(
             name: item.productName,
             price: item.price,
-            lastUsed: DateTime.now(),
-          ).toMap());
-        }
+          ).toMap(),
+        );
       }
+    }
 
-      // Customer balance is managed by the application layer (BillProvider).
-
-      return billId;
-    });
-  }
+    return billId;
+  });
+}
 
   /// Get all bills
   Future<List<Bill>> getAllBills() async {
@@ -360,4 +388,58 @@ class DatabaseService {
     final db = await database;
     await db.close();
   }
-}
+
+  Future<void> deleteBill(int billId) async {
+    final db = await database;
+    await db.delete('bills', where: 'id = ?', whereArgs: [billId]);
+    // bill_items cascade delete via FOREIGN KEY ON DELETE CASCADE
+  }
+
+  Future<void> deleteCustomer(int customerId) async {
+    final db = await database;
+    await db.delete('customers', where: 'id = ?', whereArgs: [customerId]);
+  }
+
+  /// Update an existing bill — overwrites bill row and replaces all items
+Future<void> updateBill(Bill bill, List<BillItem> items) async {
+  final db = await database;
+  await db.transaction((txn) async {
+    // Update the bill row
+    await txn.update(
+      'bills',
+      bill.toMap(),
+      where: 'id = ?',
+      whereArgs: [bill.id],
+    );
+
+    // Delete old items
+    await txn.delete('bill_items', where: 'bill_id = ?', whereArgs: [bill.id]);
+
+    // Insert new items with same bill_id
+    for (var item in items) {
+      await txn.insert('bill_items', item.toMap(bill.id!));
+      
+      // Upsert product (same as create)
+      final existing = await txn.query(
+        'products',
+        where: 'name = ?',
+        whereArgs: [item.productName],
+      );
+      if (existing.isNotEmpty) {
+        final existingProduct = Product.fromMap(existing.first);
+        await txn.update(
+          'products',
+          {
+            'price': item.price,
+            'last_used': DateTime.now().toIso8601String(),
+            'usage_count': existingProduct.usageCount + 1,
+          },
+          where: 'id = ?',
+          whereArgs: [existingProduct.id],
+        );
+      } else {
+        await txn.insert('products', Product(name: item.productName, price: item.price).toMap());
+      }
+    }
+  });
+}}

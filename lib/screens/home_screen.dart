@@ -38,7 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
           });
         },
         backgroundColor: AppTheme.cardBackground,
-        indicatorColor: AppTheme.primaryLight.withOpacity(0.3),
+        indicatorColor: AppTheme.primaryLight.withAlpha((0.3 * 255).round()),
         height: 70,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         destinations: const [
