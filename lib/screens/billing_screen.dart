@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_typeahead/flutter_typeahead.dart';
 import '../providers/bill_provider.dart';
+import '../models/bill_model.dart';
 import '../providers/product_provider.dart';
 import '../models/bill_item_model.dart';
 import '../models/product_model.dart';
@@ -151,6 +152,72 @@ class _BillingScreenState extends State<BillingScreen> {
       appBar: AppBar(
         title: const Text('New Bill'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.share_outlined),
+            tooltip: 'Share bill (WhatsApp or other apps)',
+            onPressed: () async {
+              final billProvider = Provider.of<BillProvider>(context, listen: false);
+              if (billProvider.currentBillItems.isEmpty || billProvider.currentCustomer == null) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Add customer and at least one item')));
+                return;
+              }
+
+              final previousBalance = billProvider.currentCustomer!.balance;
+              final grandTotal = billProvider.total + previousBalance;
+              final amountPaid = double.tryParse(_amountPaidController.text) ?? 0.0;
+              final newBalance = (grandTotal - amountPaid);
+
+              final bill = Bill(
+                billNumber: billProvider.generateBillNumber(),
+                customerId: billProvider.currentCustomer!.id,
+                customerName: billProvider.currentCustomer!.name,
+                customerCity: billProvider.currentCustomer!.city,
+                previousBalance: previousBalance,
+                subtotal: billProvider.subtotal,
+                discount: billProvider.discount,
+                total: billProvider.total,
+                amountPaid: amountPaid,
+                newBalance: newBalance,
+                grandTotal: grandTotal,
+              );
+
+              final items = List<BillItem>.from(billProvider.currentBillItems);
+              await PdfService.shareBill(context, bill, items, filename: '${bill.billNumber}.pdf');
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.print),
+            tooltip: 'Print (preview)',
+            onPressed: () async {
+              final billProvider = Provider.of<BillProvider>(context, listen: false);
+              if (billProvider.currentBillItems.isEmpty || billProvider.currentCustomer == null) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Add customer and at least one item')));
+                return;
+              }
+
+              final previousBalance = billProvider.currentCustomer!.balance;
+              final grandTotal = billProvider.total + previousBalance;
+              final amountPaid = double.tryParse(_amountPaidController.text) ?? 0.0;
+              final newBalance = (grandTotal - amountPaid);
+
+              final bill = Bill(
+                billNumber: billProvider.generateBillNumber(),
+                customerId: billProvider.currentCustomer!.id,
+                customerName: billProvider.currentCustomer!.name,
+                customerCity: billProvider.currentCustomer!.city,
+                previousBalance: previousBalance,
+                subtotal: billProvider.subtotal,
+                discount: billProvider.discount,
+                total: billProvider.total,
+                amountPaid: amountPaid,
+                newBalance: newBalance,
+                grandTotal: grandTotal,
+              );
+
+              final items = List<BillItem>.from(billProvider.currentBillItems);
+              await PdfService.generateAndPrintBill(context, bill, items);
+            },
+          ),
           Consumer<BillProvider>(
             builder: (context, billProvider, _) {
               return IconButton(

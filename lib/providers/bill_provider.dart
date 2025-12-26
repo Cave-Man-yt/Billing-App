@@ -77,7 +77,7 @@ class BillProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  String _generateBillNumber() {
+  String generateBillNumber() {
     final now = DateTime.now();
     final dateStr = DateFormat('yyyyMMdd').format(now);
     final timeStr = DateFormat('HHmmss').format(now);
@@ -94,7 +94,7 @@ class BillProvider with ChangeNotifier {
       final newBalance = (grandTotal - amountPaid);
 
       final bill = Bill(
-        billNumber: _generateBillNumber(),
+        billNumber: generateBillNumber(),
         customerId: _currentCustomer!.id,
         customerName: _currentCustomer!.name,
         customerCity: _currentCustomer!.city,

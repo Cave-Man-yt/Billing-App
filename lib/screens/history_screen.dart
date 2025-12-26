@@ -111,9 +111,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               ? AppTheme.creditColor
                               : AppTheme.accentColor,
                           child: Icon(
-                            bill.isCredit
-                                ? Icons.credit_card
-                                : Icons.receipt,
+                            bill.isCredit ? Icons.credit_card : Icons.receipt,
                             color: Colors.white,
                           ),
                         ),
@@ -125,27 +123,51 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           '${bill.customerName}\n${DateFormat('dd MMM yyyy, hh:mm a').format(bill.createdAt)}',
                         ),
                         isThreeLine: true,
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              '₹${bill.total.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.primaryColor,
-                              ),
-                            ),
-                            if (bill.isCredit)
-                              const Text(
-                                'CREDIT',
-                                style: TextStyle(
-                                  color: AppTheme.creditColor,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  '₹${bill.total.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.primaryColor,
+                                  ),
                                 ),
-                              ),
+                                if (bill.isCredit)
+                                  const Text(
+                                    'CREDIT',
+                                    style: TextStyle(
+                                      color: AppTheme.creditColor,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.share_outlined),
+                              tooltip: 'Share PDF',
+                              onPressed: () async {
+                                final items = await billProvider.getBillItems(bill.id!);
+                                if (!context.mounted) return;
+                                await PdfService.shareBill(context, bill, items, filename: '${bill.billNumber}.pdf');
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.print),
+                              tooltip: 'Print',
+                              onPressed: () async {
+                                final items = await billProvider.getBillItems(bill.id!);
+                                if (!context.mounted) return;
+                                await PdfService.generateAndPrintBill(context, bill, items);
+                              },
+                            ),
                           ],
                         ),
                         onTap: () async {
