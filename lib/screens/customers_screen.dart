@@ -168,7 +168,7 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
             ),
             const SizedBox(height: 16),
             TextField(
-              controller: _cityController,
+              control// File: lib/providers/bill_ler: _cityController,
               decoration: const InputDecoration(
                 labelText: 'City',
                 prefixIcon: Icon(Icons.location_city),
