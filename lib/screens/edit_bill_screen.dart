@@ -4,9 +4,10 @@ import 'package:provider/provider.dart';
 import '../models/bill_model.dart';
 import '../models/bill_item_model.dart';
 import '../providers/bill_provider.dart';
+import '../providers/customer_provider.dart';
 import '../services/pdf_service.dart';
 import '../utils/app_theme.dart';
-import 'billing_screen.dart';  // ← THIS WAS MISSING
+import 'billing_screen.dart';
 
 class EditBillScreen extends StatefulWidget {
   final Bill bill;
@@ -32,10 +33,13 @@ class _EditBillScreenState extends State<EditBillScreen> {
   Future<void> _saveAndPrint() async {
     setState(() => _isProcessing = true);
     try {
-      // For editing old bill, amountPaid usually stays as original or 0
-      // But we let user enter new one in BillingScreen
-      final amountPaid = 0.0; // Or read from controller if you add field
-      final updatedBill = await billProvider.saveBill(amountPaid, clearAfterSave: false);
+      final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+      const amountPaid = 0.0;
+      final updatedBill = await billProvider.saveBill(
+        amountPaid,
+        clearAfterSave: false,
+        customerProvider: customerProvider,
+      );
       if (updatedBill == null || !mounted) return;
 
       final items = billProvider.currentBillItems;
@@ -76,7 +80,7 @@ class _EditBillScreenState extends State<EditBillScreen> {
           ),
         ],
       ),
-      body: const BillingScreen(),  // Reuses full UI with pre-loaded data
+      body: const BillingScreen(),
     );
   }
 }

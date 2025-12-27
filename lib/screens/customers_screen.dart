@@ -8,7 +8,6 @@ import '../models/customer_model.dart';
 import '../utils/app_theme.dart';
 import 'package:billing_app/services/database_service.dart';
 
-// Replace the entire CustomersScreen class in lib/screens/customers_screen.dart with this (adds long press delete)
 class CustomersScreen extends StatelessWidget {
   const CustomersScreen({super.key});
 
@@ -33,18 +32,29 @@ class CustomersScreen extends StatelessWidget {
         title: const Text('Delete Customer'),
         content: const Text('Are you sure you want to delete this customer? This action cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
-    if (confirm == true) {
+    
+    if (confirm == true && context.mounted) {
       await DatabaseService.instance.deleteCustomer(customer.id!);
-      final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
-      await customerProvider.loadCustomers();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Customer deleted')),
-      );
+      if (context.mounted) {
+        final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+        await customerProvider.loadCustomers();
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Customer deleted')),
+          );
+        }
+      }
     }
   }
 
@@ -95,7 +105,7 @@ class CustomersScreen extends StatelessWidget {
               return Card(
                 child: ListTile(
                   onTap: () => _showEditBalanceDialog(context, customer),
-                  onLongPress: () => _deleteCustomer(context, customer),  // ← NEW: Long press to delete
+                  onLongPress: () => _deleteCustomer(context, customer),
                   leading: CircleAvatar(
                     backgroundColor:
                         hasBalance ? AppTheme.warningColor : AppTheme.accentColor,
@@ -296,7 +306,7 @@ class _EditBalanceDialogState extends State<EditBalanceDialog> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppTheme.warningColor.withAlpha(26),  // 0.1 ≈ 26/255
+                color: AppTheme.warningColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Row(

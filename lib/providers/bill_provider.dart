@@ -6,7 +6,6 @@ import '../models/bill_model.dart';
 import '../models/bill_item_model.dart';
 import '../models/customer_model.dart';
 import '../services/database_service.dart';
-import 'package:provider/provider.dart';
 
 class BillProvider with ChangeNotifier {
   List<Bill> _bills = [];
@@ -117,7 +116,11 @@ class BillProvider with ChangeNotifier {
     _editingBillId = null;
   }
 
-  Future<Bill?> saveBill(double amountPaid, {bool clearAfterSave = true}) async {
+  Future<Bill?> saveBill(
+    double amountPaid, {
+    bool clearAfterSave = true,
+    CustomerProvider? customerProvider, // Add this parameter
+  }) async {
     if (_currentBillItems.isEmpty) return null;
     if (_currentCustomer == null) return null;
 
@@ -160,7 +163,10 @@ class BillProvider with ChangeNotifier {
         await DatabaseService.instance.updateCustomerBalance(_currentCustomer!.id!, newBalance);
       }
 
-      await Provider.of<CustomerProvider>(context, listen: false).refresh();
+      // Refresh customer provider if passed
+      if (customerProvider != null) {
+        await customerProvider.refresh();
+      }
 
       await loadBills();
 

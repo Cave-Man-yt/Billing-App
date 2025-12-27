@@ -6,8 +6,8 @@ import '../providers/bill_provider.dart';
 import '../models/bill_model.dart';
 import '../utils/app_theme.dart';
 import '../services/pdf_service.dart';
-import '../services/database_service.dart';  // ← For delete
-import 'billing_screen.dart';  // ← To push editing screen (reuse BillingScreen)
+import '../services/database_service.dart';
+import 'billing_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -44,28 +44,32 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _deleteBill(int billId) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Bill'),
-        content: const Text('Are you sure you want to delete this bill? This cannot be undone.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
-        ],
-      ),
-    );
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Delete Bill'),
+      content: const Text('Are you sure you want to delete this bill? This cannot be undone.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+      ],
+    ),
+  );
 
-    if (confirm == true && mounted) {
-      await DatabaseService.instance.deleteBill(billId);
+  if (confirm == true) {
+    await DatabaseService.instance.deleteBill(billId);
+    if (mounted) {
       final billProvider = Provider.of<BillProvider>(context, listen: false);
       await billProvider.loadBills();
       _loadBills();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bill deleted successfully')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bill deleted successfully')),
+        );
+      }
     }
   }
+}
 
   Future<void> _openBillForEditing(Bill bill) async {
     final billProvider = Provider.of<BillProvider>(context, listen: false);
@@ -73,19 +77,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     if (!mounted) return;
 
-    // Load data
     billProvider.loadBillForEditing(bill, items);
-    // Set editing mode
     billProvider.startEditingExistingBill(bill.id!);
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const BillingScreen()),
-    ).then((_) {
-      billProvider.loadBills();
-      _loadBills();
-    });
-}
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const BillingScreen()),
+      ).then((_) {
+        billProvider.loadBills();
+        _loadBills();
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -143,8 +147,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     final bill = _filteredBills[index];
                     return Card(
                       child: ListTile(
-                        onTap: () => _openBillForEditing(bill),  // ← Tap to edit
-                        onLongPress: () => _deleteBill(bill.id!),  // ← Long press delete
+                        onTap: () => _openBillForEditing(bill),
+                        onLongPress: () => _deleteBill(bill.id!),
                         leading: CircleAvatar(
                           backgroundColor: bill.isCredit ? AppTheme.creditColor : AppTheme.accentColor,
                           child: Icon(
@@ -192,8 +196,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               tooltip: 'Share PDF',
                               onPressed: () async {
                                 final items = await billProvider.getBillItems(bill.id!);
-                                if (!mounted) return;
-                                await PdfService.shareBill(context, bill, items, filename: '${bill.billNumber}.pdf');
+                                if (context.mounted) {
+                                  await PdfService.shareBill(context, bill, items, filename: '${bill.billNumber}.pdf');
+                                }
                               },
                             ),
                             IconButton(
@@ -201,8 +206,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               tooltip: 'Print',
                               onPressed: () async {
                                 final items = await billProvider.getBillItems(bill.id!);
-                                if (!mounted) return;
-                                await PdfService.generateAndPrintBill(context, bill, items);
+                                if (context.mounted) {
+                                  await PdfService.generateAndPrintBill(context, bill, items);
+                                }
                               },
                             ),
                           ],

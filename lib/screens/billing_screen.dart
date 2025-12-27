@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_typeahead/flutter_typeahead.dart';
 import '../providers/bill_provider.dart';
+import '../providers/customer_provider.dart';
 import '../providers/product_provider.dart';
 import '../models/bill_item_model.dart';
 import '../models/product_model.dart';
@@ -21,10 +22,10 @@ class BillingScreen extends StatefulWidget {
 
 class _BillingScreenState extends State<BillingScreen> {
   final _itemNameController = TextEditingController();
-  final _quantityController = TextEditingController(); // Empty by default
+  final _quantityController = TextEditingController();
   final _priceController = TextEditingController();
   final _discountController = TextEditingController();
-  final _amountPaidController = TextEditingController(); // Empty by default
+  final _amountPaidController = TextEditingController();
   final _itemNameFocus = FocusNode();
   final _quantityFocus = FocusNode();
   final _priceFocus = FocusNode();
@@ -59,34 +60,36 @@ class _BillingScreenState extends State<BillingScreen> {
   }
 
   void _addOrUpdateItem() async {
-  final name = _itemNameController.text.trim();
-  final qtyText = _quantityController.text.trim();
-  final qty = qtyText.isEmpty ? 1.0 : (double.tryParse(qtyText) ?? 0.0);
-  final price = double.tryParse(_priceController.text) ?? 0.0;
+    final name = _itemNameController.text.trim();
+    final qtyText = _quantityController.text.trim();
+    final qty = qtyText.isEmpty ? 1.0 : (double.tryParse(qtyText) ?? 0.0);
+    final price = double.tryParse(_priceController.text) ?? 0.0;
 
-  if (name.isEmpty || qty <= 0 || price <= 0) return;
+    if (name.isEmpty || qty <= 0 || price <= 0) return;
 
-  final item = BillItem(productName: name, quantity: qty, price: price);
-  final billProvider = Provider.of<BillProvider>(context, listen: false);
+    final item = BillItem(productName: name, quantity: qty, price: price);
+    final billProvider = Provider.of<BillProvider>(context, listen: false);
 
-  if (_editingIndex != null) {
-    billProvider.updateBillItem(_editingIndex!, item);
-    setState(() => _editingIndex = null);
-  } else {
-    billProvider.addBillItem(item);
+    if (_editingIndex != null) {
+      billProvider.updateBillItem(_editingIndex!, item);
+      setState(() => _editingIndex = null);
+    } else {
+      billProvider.addBillItem(item);
+    }
+
+    // Update product price in suggestions immediately
+    final productProvider = Provider.of<ProductProvider>(context, listen: false);
+    await productProvider.upsertProductPrice(name, price);
+
+    // Reset fields
+    _itemNameController.clear();
+    _quantityController.clear();
+    _priceController.clear();
+    _itemNameFocus.requestFocus();
+    if (mounted) {
+      FocusScope.of(context).unfocus();
+    }
   }
-
-  // Update product price in suggestions immediately
-  final productProvider = Provider.of<ProductProvider>(context, listen: false);
-  await productProvider.upsertProductPrice(name, price);
-
-  // Reset fields
-  _itemNameController.clear();
-  _quantityController.clear();
-  _priceController.clear();
-  _itemNameFocus.requestFocus();
-  FocusScope.of(context).unfocus(); // ← Closes keyboard after adding item
-}
 
   void _editItem(int index, BillItem item) {
     setState(() {
@@ -100,17 +103,22 @@ class _BillingScreenState extends State<BillingScreen> {
 
   Future<void> _completeAndPrint() async {
     final billProvider = Provider.of<BillProvider>(context, listen: false);
+    final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
 
     if (billProvider.currentBillItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add at least one item')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Add at least one item')),
+        );
+      }
       return;
     }
     if (billProvider.currentCustomer == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a customer')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Select a customer')),
+        );
+      }
       return;
     }
 
@@ -121,7 +129,11 @@ class _BillingScreenState extends State<BillingScreen> {
       final amountPaid = amountPaidText.isEmpty ? 0.0 : (double.tryParse(amountPaidText) ?? 0.0);
 
       final itemsCopy = List<BillItem>.from(billProvider.currentBillItems);
-      final bill = await billProvider.saveBill(amountPaid, clearAfterSave: false);
+      final bill = await billProvider.saveBill(
+        amountPaid,
+        clearAfterSave: false,
+        customerProvider: customerProvider,
+      );
 
       if (bill == null || !mounted) return;
 
@@ -131,12 +143,14 @@ class _BillingScreenState extends State<BillingScreen> {
       _discountController.clear();
       _amountPaidController.clear();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Bill saved & printed!'),
-          backgroundColor: AppTheme.successColor,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Bill saved & printed!'),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -149,101 +163,104 @@ class _BillingScreenState extends State<BillingScreen> {
   }
 
   Future<void> _shareViaWhatsApp() async {
-  final billProvider = Provider.of<BillProvider>(context, listen: false);
+    final billProvider = Provider.of<BillProvider>(context, listen: false);
+    final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
 
-  if (billProvider.currentBillItems.isEmpty || billProvider.currentCustomer == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Add customer & items first')),
-    );
-    return;
-  }
-
-  setState(() => _isProcessing = true);
-
-  try {
-    final amountPaidText = _amountPaidController.text.trim();
-    final amountPaid = amountPaidText.isEmpty ? 0.0 : (double.tryParse(amountPaidText) ?? 0.0);
-
-    final itemsCopy = List<BillItem>.from(billProvider.currentBillItems);
-    final bill = await billProvider.saveBill(amountPaid, clearAfterSave: false);
-
-    if (bill == null || !mounted) return;
-
-    // Use public method — no need to access private _buildPdfBytes
-    await PdfService.shareBill(
-      context,
-      bill,
-      itemsCopy,
-      filename: '${bill.billNumber}.pdf',
-    );
-
-    billProvider.clearCurrentBill();
-    _discountController.clear();
-    _amountPaidController.clear();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Bill saved & sent to WhatsApp!'),
-        backgroundColor: AppTheme.successColor,
-      ),
-    );
-  } catch (e) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.errorColor),
-      );
+    if (billProvider.currentBillItems.isEmpty || billProvider.currentCustomer == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Add customer & items first')),
+        );
+      }
+      return;
     }
-  } finally {
-    if (mounted) setState(() => _isProcessing = false);
+
+    setState(() => _isProcessing = true);
+
+    try {
+      final amountPaidText = _amountPaidController.text.trim();
+      final amountPaid = amountPaidText.isEmpty ? 0.0 : (double.tryParse(amountPaidText) ?? 0.0);
+
+      final itemsCopy = List<BillItem>.from(billProvider.currentBillItems);
+      final bill = await billProvider.saveBill(
+        amountPaid,
+        clearAfterSave: false,
+        customerProvider: customerProvider,
+      );
+
+      if (bill == null || !mounted) return;
+
+      await PdfService.shareBill(
+        context,
+        bill,
+        itemsCopy,
+        filename: '${bill.billNumber}.pdf',
+      );
+
+      billProvider.clearCurrentBill();
+      _discountController.clear();
+      _amountPaidController.clear();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Bill saved & sent to WhatsApp!'),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.errorColor),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
   }
-}
 
   @override
-Widget build(BuildContext context) {
-  return Scaffold(
-    appBar: AppBar(
-      title: Consumer<BillProvider>(
-        builder: (context, billProvider, _) {
-          if (billProvider.isEditingExistingBill && billProvider.editingBillId != null) {
-            final originalBill = billProvider.bills.firstWhere(
-              (b) => b.id == billProvider.editingBillId,
-              orElse: () => Bill(
-                billNumber: 'Unknown',
-                customerName: '',
-                subtotal: 0.0,
-                discount: 0.0,
-                total: 0.0,
-              ),
-            );
-            return Text('Edit Bill - ${originalBill.billNumber}');
-          }
-          return const Text('New Estimate');
-        },
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Consumer<BillProvider>(
+          builder: (context, billProvider, _) {
+            if (billProvider.isEditingExistingBill && billProvider.editingBillId != null) {
+              final originalBill = billProvider.bills.firstWhere(
+                (b) => b.id == billProvider.editingBillId,
+                orElse: () => Bill(
+                  billNumber: 'Unknown',
+                  customerName: '',
+                  subtotal: 0.0,
+                  discount: 0.0,
+                  total: 0.0,
+                ),
+              );
+              return Text('Edit Bill - ${originalBill.billNumber}');
+            }
+            return const Text('New Estimate');
+          },
+        ),
       ),
-      actions: [],
-    ),
-    body: Row(
-  children: [
-    Expanded(flex: 4, child: _buildItemEntrySection()),
-    Expanded(
-      flex: 7,
-      child: Column(
+      body: Row(
         children: [
-          const CustomerSelector(),
-          const Divider(height: 1),
-          // Scrollable items list — takes all available space
+          Expanded(flex: 4, child: _buildItemEntrySection()),
           Expanded(
-            child: _buildPreviewSectionItems(),
+            flex: 7,
+            child: Column(
+              children: [
+                const CustomerSelector(),
+                const Divider(height: 1),
+                Expanded(child: _buildPreviewSectionItems()),
+                _buildSummarySection(),
+              ],
+            ),
           ),
-          // Summary + buttons — always visible at bottom, no scroll
-          _buildSummarySection(),
         ],
       ),
-    ),
-  ],
-),
-  );
-}
+    );
+  }
 
   Widget _buildItemEntrySection() {
     return Container(
@@ -259,41 +276,40 @@ Widget build(BuildContext context) {
             ),
             const SizedBox(height: 24),
             Consumer<ProductProvider>(
-  builder: (context, productProvider, _) {
-    return TypeAheadField<Product>(
-      controller: _itemNameController,
-      focusNode: _itemNameFocus,
-      suggestionsCallback: (pattern) async {
-        final trimmed = pattern.trim();
-        if (trimmed.isEmpty) {
-          // Show top 10 most used when field focused
-          return productProvider.products.take(10).toList();
-        }
-        return await productProvider.searchProducts(trimmed);
-      },
-      itemBuilder: (context, suggestion) => ListTile(
-        dense: true,
-        title: Text(suggestion.name),
-        trailing: Text('₹${suggestion.price.toStringAsFixed(0)}'),
-      ),
-      onSelected: (suggestion) {
-        _itemNameController.text = suggestion.name;
-        _priceController.text = suggestion.price.toString();
-        _quantityFocus.requestFocus();
-      },
-      builder: (context, controller, focusNode) => TextField(
-        controller: controller,
-        focusNode: focusNode,
-        decoration: const InputDecoration(
-          labelText: 'Item Name',
-          prefixIcon: Icon(Icons.inventory_2_outlined),
-        ),
-        textCapitalization: TextCapitalization.words,
-        onSubmitted: (_) => _quantityFocus.requestFocus(),
-      ),
-    );
-  },
-),
+              builder: (context, productProvider, _) {
+                return TypeAheadField<Product>(
+                  controller: _itemNameController,
+                  focusNode: _itemNameFocus,
+                  suggestionsCallback: (pattern) async {
+                    final trimmed = pattern.trim();
+                    if (trimmed.isEmpty) {
+                      return productProvider.products.take(10).toList();
+                    }
+                    return await productProvider.searchProducts(trimmed);
+                  },
+                  itemBuilder: (context, suggestion) => ListTile(
+                    dense: true,
+                    title: Text(suggestion.name),
+                    trailing: Text('₹${suggestion.price.toStringAsFixed(0)}'),
+                  ),
+                  onSelected: (suggestion) {
+                    _itemNameController.text = suggestion.name;
+                    _priceController.text = suggestion.price.toString();
+                    _quantityFocus.requestFocus();
+                  },
+                  builder: (context, controller, focusNode) => TextField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    decoration: const InputDecoration(
+                      labelText: 'Item Name',
+                      prefixIcon: Icon(Icons.inventory_2_outlined),
+                    ),
+                    textCapitalization: TextCapitalization.words,
+                    onSubmitted: (_) => _quantityFocus.requestFocus(),
+                  ),
+                );
+              },
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: _quantityController,
@@ -341,7 +357,7 @@ Widget build(BuildContext context) {
                 final lineTotal = qty * price;
                 if (lineTotal > 0) {
                   return Card(
-                    color: AppTheme.primaryLight.withAlpha(26),
+                    color: AppTheme.primaryLight.withValues(alpha: 0.1),
                     child: Padding(
                       padding: const EdgeInsets.all(12),
                       child: Row(
@@ -371,195 +387,190 @@ Widget build(BuildContext context) {
     );
   }
 
-Widget _buildPreviewSection() {
-  return _buildSummarySection();  // ← Fixed "Summsry" → "Summary"
-}
-
   Widget _buildSummarySection() {
-  return Consumer<BillProvider>(
-    builder: (context, billProvider, _) {
-      final canSave = billProvider.currentBillItems.isNotEmpty && billProvider.currentCustomer != null;
+    return Consumer<BillProvider>(
+      builder: (context, billProvider, _) {
+        final canSave = billProvider.currentBillItems.isNotEmpty && billProvider.currentCustomer != null;
 
-      // Live calculations
-      final previousBalance = billProvider.currentCustomer?.balance ?? 0.0;
-      final grandTotal = billProvider.total + previousBalance;
-      final amountPaidText = _amountPaidController.text.trim();
-      final amountPaid = amountPaidText.isEmpty ? 0.0 : (double.tryParse(amountPaidText) ?? 0.0);
-      final finalBalance = grandTotal - amountPaid;
+        final previousBalance = billProvider.currentCustomer?.balance ?? 0.0;
+        final grandTotal = billProvider.total + previousBalance;
+        final amountPaidText = _amountPaidController.text.trim();
+        final amountPaid = amountPaidText.isEmpty ? 0.0 : (double.tryParse(amountPaidText) ?? 0.0);
+        final finalBalance = grandTotal - amountPaid;
 
-      return Container(
-        padding: const EdgeInsets.all(12), // ← Reduced from 16
-        decoration: BoxDecoration(
-          color: AppTheme.backgroundLight,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 6,
-              offset: const Offset(0, -2),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            TextField(
-              controller: _discountController,
-              decoration: const InputDecoration(
-                labelText: 'Discount',
-                prefixIcon: Icon(Icons.local_offer_outlined),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppTheme.backgroundLight,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 6,
+                offset: const Offset(0, -2),
               ),
-              style: const TextStyle(fontSize: 14),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _amountPaidController,
-              decoration: const InputDecoration(
-                labelText: 'Amount Paid',
-                hintText: '0.00',
-                prefixIcon: Icon(Icons.payment),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              ),
-              style: const TextStyle(fontSize: 14),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
-            ),
-            const SizedBox(height: 8),
-            // Compact summary rows
-            _summaryRow('Subtotal:', billProvider.subtotal.toStringAsFixed(2), fontSize: 14),
-            if (billProvider.discount > 0)
-              _summaryRow('Discount:', '-${billProvider.discount.toStringAsFixed(2)}', color: AppTheme.successColor, fontSize: 14),
-            const Divider(height: 12),
-            _summaryRow('Bill Total:', billProvider.total.toStringAsFixed(2), isBold: true, fontSize: 16),
-            const SizedBox(height: 8),
-            if (previousBalance > 0)
-              _summaryRow('Prev. Bal:', previousBalance.toStringAsFixed(2), fontSize: 14),
-            _summaryRow('Grand Total:', grandTotal.toStringAsFixed(2), isBold: true, fontSize: 18),
-            const SizedBox(height: 8),
-            _summaryRow('Amount Paid:', amountPaid.toStringAsFixed(2), color: AppTheme.successColor, fontSize: 14),
-            _summaryRow('Final Bal:', finalBalance.toStringAsFixed(2), 
-              isBold: true, 
-              fontSize: 18,
-              color: finalBalance > 0 ? AppTheme.errorColor : AppTheme.successColor,
-            ),
-            const SizedBox(height: 12),
-            // Big buttons — slightly smaller but still thumb-friendly
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: canSave && !_isProcessing ? () => _shareViaWhatsApp() : null,
-                    icon: _isProcessing
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : const Icon(Icons.send, size: 24),
-                    label: const Text('WHATSAPP', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green[700],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: canSave && !_isProcessing ? _completeAndPrint : null,
-                    icon: _isProcessing
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : const Icon(Icons.print, size: 24),
-                    label: const Text('PRINT', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    },
-  );
-}
-
-Widget _buildPreviewSectionItems() {
-  return Consumer<BillProvider>(
-    builder: (context, billProvider, _) {
-      if (billProvider.currentBillItems.isEmpty) {
-        return const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.shopping_cart_outlined, size: 80, color: AppTheme.textHint),
-              SizedBox(height: 16),
-              Text('No items added', style: TextStyle(fontSize: 18, color: AppTheme.textSecondary)),
             ],
           ),
-        );
-      }
-      return ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: billProvider.currentBillItems.length,
-        itemBuilder: (context, index) {
-          final item = billProvider.currentBillItems[index];
-          return Card(
-            elevation: 2,
-            margin: const EdgeInsets.only(bottom: 8),
-            child: ListTile(
-              onTap: () => _editItem(index, item),
-              title: Text(item.productName, style: const TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: Text('${item.quantity} × ${item.price.toStringAsFixed(2)}'),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
+          child: Column(
+            children: [
+              TextField(
+                controller: _discountController,
+                decoration: const InputDecoration(
+                  labelText: 'Discount',
+                  prefixIcon: Icon(Icons.local_offer_outlined),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+                style: const TextStyle(fontSize: 14),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _amountPaidController,
+                decoration: const InputDecoration(
+                  labelText: 'Amount Paid',
+                  hintText: '0.00',
+                  prefixIcon: Icon(Icons.payment),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+                style: const TextStyle(fontSize: 14),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+              ),
+              const SizedBox(height: 8),
+              _summaryRow('Subtotal:', billProvider.subtotal.toStringAsFixed(2), fontSize: 14),
+              if (billProvider.discount > 0)
+                _summaryRow('Discount:', '-${billProvider.discount.toStringAsFixed(2)}', color: AppTheme.successColor, fontSize: 14),
+              const Divider(height: 12),
+              _summaryRow('Bill Total:', billProvider.total.toStringAsFixed(2), isBold: true, fontSize: 16),
+              const SizedBox(height: 8),
+              if (previousBalance > 0)
+                _summaryRow('Prev. Bal:', previousBalance.toStringAsFixed(2), fontSize: 14),
+              _summaryRow('Grand Total:', grandTotal.toStringAsFixed(2), isBold: true, fontSize: 18),
+              const SizedBox(height: 8),
+              _summaryRow('Amount Paid:', amountPaid.toStringAsFixed(2), color: AppTheme.successColor, fontSize: 14),
+              _summaryRow(
+                'Final Bal:',
+                finalBalance.toStringAsFixed(2),
+                isBold: true,
+                fontSize: 18,
+                color: finalBalance > 0 ? AppTheme.errorColor : AppTheme.successColor,
+              ),
+              const SizedBox(height: 12),
+              Row(
                 children: [
-                  Text(
-                    '${item.total.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryColor),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: canSave && !_isProcessing ? () => _shareViaWhatsApp() : null,
+                      icon: _isProcessing
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          : const Icon(Icons.send, size: 24),
+                      label: const Text('WHATSAPP', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green[700],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
                   ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, color: AppTheme.errorColor),
-                    onPressed: () => billProvider.removeBillItem(index),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: canSave && !_isProcessing ? _completeAndPrint : null,
+                      icon: _isProcessing
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          : const Icon(Icons.print, size: 24),
+                      label: const Text('PRINT', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
                   ),
                 ],
               ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPreviewSectionItems() {
+    return Consumer<BillProvider>(
+      builder: (context, billProvider, _) {
+        if (billProvider.currentBillItems.isEmpty) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.shopping_cart_outlined, size: 80, color: AppTheme.textHint),
+                SizedBox(height: 16),
+                Text('No items added', style: TextStyle(fontSize: 18, color: AppTheme.textSecondary)),
+              ],
             ),
           );
-        },
-      );
-    },
-  );
-}
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: billProvider.currentBillItems.length,
+          itemBuilder: (context, index) {
+            final item = billProvider.currentBillItems[index];
+            return Card(
+              elevation: 2,
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                onTap: () => _editItem(index, item),
+                title: Text(item.productName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: Text('${item.quantity} × ${item.price.toStringAsFixed(2)}'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      item.total.toStringAsFixed(2),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryColor),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: AppTheme.errorColor),
+                      onPressed: () => billProvider.removeBillItem(index),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   Widget _summaryRow(String label, String value, {Color? color, bool isBold = false, double? fontSize}) {
-  return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: fontSize ?? 14,
-            fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
-            color: color,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: fontSize ?? 14,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+              color: color,
+            ),
           ),
-        ),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: fontSize ?? 14,
-            fontWeight: FontWeight.bold,
-            color: color ?? AppTheme.primaryColor,
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: fontSize ?? 14,
+              fontWeight: FontWeight.bold,
+              color: color ?? AppTheme.primaryColor,
+            ),
           ),
-        ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
 }
