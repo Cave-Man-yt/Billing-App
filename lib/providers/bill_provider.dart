@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import '../models/bill_model.dart';
 import '../models/bill_item_model.dart';
 import '../models/customer_model.dart';
-import '../models/product_model.dart';
 import '../services/database_service.dart';
 
 class BillProvider with ChangeNotifier {

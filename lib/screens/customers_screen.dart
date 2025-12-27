@@ -296,7 +296,7 @@ class _EditBalanceDialogState extends State<EditBalanceDialog> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppTheme.warningColor.withOpacity(0.1),
+                color: AppTheme.warningColor.withAlpha(26),  // 0.1 ≈ 26/255
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Row(

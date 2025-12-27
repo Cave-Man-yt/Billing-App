@@ -11,7 +11,6 @@ import '../models/bill_model.dart';
 import '../utils/app_theme.dart';
 import '../widgets/customer_selector.dart';
 import '../services/pdf_service.dart';
-import 'package:printing/printing.dart';
 
 class BillingScreen extends StatefulWidget {
   const BillingScreen({super.key});
@@ -86,6 +85,7 @@ class _BillingScreenState extends State<BillingScreen> {
   _quantityController.clear();
   _priceController.clear();
   _itemNameFocus.requestFocus();
+  FocusScope.of(context).unfocus(); // ← Closes keyboard after adding item
 }
 
   void _editItem(int index, BillItem item) {
@@ -223,11 +223,25 @@ Widget build(BuildContext context) {
       actions: [],
     ),
     body: Row(
-      children: [
-        Expanded(flex: 4, child: _buildItemEntrySection()),
-        Expanded(flex: 6, child: _buildPreviewSection()),
-      ],
+  children: [
+    Expanded(flex: 4, child: _buildItemEntrySection()),
+    Expanded(
+      flex: 7,
+      child: Column(
+        children: [
+          const CustomerSelector(),
+          const Divider(height: 1),
+          // Scrollable items list — takes all available space
+          Expanded(
+            child: _buildPreviewSectionItems(),
+          ),
+          // Summary + buttons — always visible at bottom, no scroll
+          _buildSummarySection(),
+        ],
+      ),
     ),
+  ],
+),
   );
 }
 
@@ -357,69 +371,9 @@ Widget build(BuildContext context) {
     );
   }
 
-  Widget _buildPreviewSection() {
-    return Container(
-      color: Colors.white,
-      child: Column(
-        children: [
-          const CustomerSelector(),
-          const Divider(height: 1),
-          Expanded(
-            child: Consumer<BillProvider>(
-              builder: (context, billProvider, _) {
-                if (billProvider.currentBillItems.isEmpty) {
-                  return const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.shopping_cart_outlined, size: 80, color: AppTheme.textHint),
-                        SizedBox(height: 16),
-                        Text('No items added', style: TextStyle(fontSize: 18, color: AppTheme.textSecondary)),
-                      ],
-                    ),
-                  );
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: billProvider.currentBillItems.length,
-                  itemBuilder: (context, index) {
-                    final item = billProvider.currentBillItems[index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        onTap: () => _editItem(index, item),
-                        title: Text(item.productName, style: const TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: Text('${item.quantity} × ₹${item.price.toStringAsFixed(2)}'),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              '₹${item.total.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.primaryColor,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, color: AppTheme.errorColor),
-                              onPressed: () => billProvider.removeBillItem(index),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-          _buildSummarySection(),
-        ],
-      ),
-    );
-  }
+Widget _buildPreviewSection() {
+  return _buildSummarySection();  // ← Fixed "Summsry" → "Summary"
+}
 
   Widget _buildSummarySection() {
   return Consumer<BillProvider>(
@@ -427,7 +381,7 @@ Widget build(BuildContext context) {
       final canSave = billProvider.currentBillItems.isNotEmpty && billProvider.currentCustomer != null;
 
       return Container(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: AppTheme.backgroundLight,
           boxShadow: [
@@ -507,6 +461,55 @@ Widget build(BuildContext context) {
             ],
           ),
         ),
+      );
+    },
+  );
+}
+
+Widget _buildPreviewSectionItems() {
+  return Consumer<BillProvider>(
+    builder: (context, billProvider, _) {
+      if (billProvider.currentBillItems.isEmpty) {
+        return const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.shopping_cart_outlined, size: 80, color: AppTheme.textHint),
+              SizedBox(height: 16),
+              Text('No items added', style: TextStyle(fontSize: 18, color: AppTheme.textSecondary)),
+            ],
+          ),
+        );
+      }
+      return ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: billProvider.currentBillItems.length,
+        itemBuilder: (context, index) {
+          final item = billProvider.currentBillItems[index];
+          return Card(
+            elevation: 2,
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              onTap: () => _editItem(index, item),
+              title: Text(item.productName, style: const TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: Text('${item.quantity} × ${item.price.toStringAsFixed(2)}'),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${item.total.toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryColor),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: AppTheme.errorColor),
+                    onPressed: () => billProvider.removeBillItem(index),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       );
     },
   );
