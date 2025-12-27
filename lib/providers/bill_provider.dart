@@ -1,10 +1,12 @@
 // lib/providers/bill_provider.dart
+import 'package:billing_app/providers/customer_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/bill_model.dart';
 import '../models/bill_item_model.dart';
 import '../models/customer_model.dart';
 import '../services/database_service.dart';
+import 'package:provider/provider.dart';
 
 class BillProvider with ChangeNotifier {
   List<Bill> _bills = [];
@@ -157,6 +159,8 @@ class BillProvider with ChangeNotifier {
       if (_currentCustomer!.id != null) {
         await DatabaseService.instance.updateCustomerBalance(_currentCustomer!.id!, newBalance);
       }
+
+      await Provider.of<CustomerProvider>(context, listen: false).refresh();
 
       await loadBills();
 

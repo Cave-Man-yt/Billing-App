@@ -63,4 +63,8 @@ class CustomerProvider with ChangeNotifier {
     if (query.isEmpty) return _customers;
     return await DatabaseService.instance.searchCustomers(query);
   }
+
+  Future<void> refresh() async {
+    await loadCustomers();
+  }
 }

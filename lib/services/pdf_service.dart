@@ -88,7 +88,7 @@ class PdfService {
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
-                  pw.Text('INVOICE', style: pw.TextStyle(font: bold, fontSize: 20)),
+                  pw.Text('ESTIMATE', style: pw.TextStyle(font: bold, fontSize: 20)),
                   pw.Text('No: ${bill.billNumber}'),
                   pw.Text('Date: ${DateFormat('dd/MM/yyyy').format(bill.createdAt)}'),
                 ],

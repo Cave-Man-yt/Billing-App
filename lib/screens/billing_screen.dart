@@ -380,86 +380,107 @@ Widget _buildPreviewSection() {
     builder: (context, billProvider, _) {
       final canSave = billProvider.currentBillItems.isNotEmpty && billProvider.currentCustomer != null;
 
+      // Live calculations
+      final previousBalance = billProvider.currentCustomer?.balance ?? 0.0;
+      final grandTotal = billProvider.total + previousBalance;
+      final amountPaidText = _amountPaidController.text.trim();
+      final amountPaid = amountPaidText.isEmpty ? 0.0 : (double.tryParse(amountPaidText) ?? 0.0);
+      final finalBalance = grandTotal - amountPaid;
+
       return Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12), // ← Reduced from 16
         decoration: BoxDecoration(
           color: AppTheme.backgroundLight,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.1),
-              blurRadius: 8,
+              blurRadius: 6,
               offset: const Offset(0, -2),
             ),
           ],
         ),
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              TextField(
-                controller: _discountController,
-                decoration: const InputDecoration(
-                  labelText: 'Discount (₹)',
-                  prefixIcon: Icon(Icons.local_offer_outlined),
-                ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+        child: Column(
+          children: [
+            TextField(
+              controller: _discountController,
+              decoration: const InputDecoration(
+                labelText: 'Discount',
+                prefixIcon: Icon(Icons.local_offer_outlined),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _amountPaidController,
-                decoration: const InputDecoration(
-                  labelText: 'Amount Paid (₹)',
-                  hintText: '0.00',
-                  prefixIcon: Icon(Icons.payment),
-                ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+              style: const TextStyle(fontSize: 14),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _amountPaidController,
+              decoration: const InputDecoration(
+                labelText: 'Amount Paid',
+                hintText: '0.00',
+                prefixIcon: Icon(Icons.payment),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
-              const SizedBox(height: 16),
-              _summaryRow('Subtotal:', '₹${billProvider.subtotal.toStringAsFixed(2)}'),
-              if (billProvider.discount > 0)
-                _summaryRow('Discount:', '-₹${billProvider.discount.toStringAsFixed(2)}', color: AppTheme.successColor),
-              const Divider(height: 32),
-              _summaryRow('TOTAL:', '₹${billProvider.total.toStringAsFixed(2)}', isBold: true, fontSize: 24),
-              const SizedBox(height: 32),
-
-              // BIG ACTION BUTTONS
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: canSave && !_isProcessing ? () => _shareViaWhatsApp() : null,
-                      icon: _isProcessing
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white))
-                          : const Icon(Icons.send, size: 28),
-                      label: const Text('SEND TO WHATSAPP', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green[700],
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 20),
-                      ),
+              style: const TextStyle(fontSize: 14),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+            ),
+            const SizedBox(height: 8),
+            // Compact summary rows
+            _summaryRow('Subtotal:', billProvider.subtotal.toStringAsFixed(2), fontSize: 14),
+            if (billProvider.discount > 0)
+              _summaryRow('Discount:', '-${billProvider.discount.toStringAsFixed(2)}', color: AppTheme.successColor, fontSize: 14),
+            const Divider(height: 12),
+            _summaryRow('Bill Total:', billProvider.total.toStringAsFixed(2), isBold: true, fontSize: 16),
+            const SizedBox(height: 8),
+            if (previousBalance > 0)
+              _summaryRow('Prev. Bal:', previousBalance.toStringAsFixed(2), fontSize: 14),
+            _summaryRow('Grand Total:', grandTotal.toStringAsFixed(2), isBold: true, fontSize: 18),
+            const SizedBox(height: 8),
+            _summaryRow('Amount Paid:', amountPaid.toStringAsFixed(2), color: AppTheme.successColor, fontSize: 14),
+            _summaryRow('Final Bal:', finalBalance.toStringAsFixed(2), 
+              isBold: true, 
+              fontSize: 18,
+              color: finalBalance > 0 ? AppTheme.errorColor : AppTheme.successColor,
+            ),
+            const SizedBox(height: 12),
+            // Big buttons — slightly smaller but still thumb-friendly
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: canSave && !_isProcessing ? () => _shareViaWhatsApp() : null,
+                    icon: _isProcessing
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Icon(Icons.send, size: 24),
+                    label: const Text('WHATSAPP', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green[700],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: canSave && !_isProcessing ? _completeAndPrint : null,
-                      icon: _isProcessing
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white))
-                          : const Icon(Icons.print, size: 28),
-                      label: const Text('PRINT', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryColor,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 20),
-                      ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: canSave && !_isProcessing ? _completeAndPrint : null,
+                    icon: _isProcessing
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Icon(Icons.print, size: 24),
+                    label: const Text('PRINT', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 32),
-            ],
-          ),
+                ),
+              ],
+            ),
+          ],
         ),
       );
     },
@@ -516,29 +537,29 @@ Widget _buildPreviewSectionItems() {
 }
 
   Widget _summaryRow(String label, String value, {Color? color, bool isBold = false, double? fontSize}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: fontSize ?? 16,
-              fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
-              color: color,
-            ),
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: fontSize ?? 14,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+            color: color,
           ),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: fontSize ?? 18,
-              fontWeight: FontWeight.bold,
-              color: color ?? AppTheme.primaryColor,
-            ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: fontSize ?? 14,
+            fontWeight: FontWeight.bold,
+            color: color ?? AppTheme.primaryColor,
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 }
