@@ -240,37 +240,41 @@ Widget build(BuildContext context) {
             ),
             const SizedBox(height: 24),
             Consumer<ProductProvider>(
-              builder: (context, productProvider, _) {
-                return TypeAheadField<Product>(
-                  controller: _itemNameController,
-                  focusNode: _itemNameFocus,
-                  suggestionsCallback: (pattern) async {
-                    if (pattern.isEmpty) return [];
-                    return await productProvider.searchProducts(pattern);
-                  },
-                  itemBuilder: (context, suggestion) => ListTile(
-                    dense: true,
-                    title: Text(suggestion.name),
-                    trailing: Text('₹${suggestion.price.toStringAsFixed(0)}'),
-                  ),
-                  onSelected: (suggestion) {
-                    _itemNameController.text = suggestion.name;
-                    _priceController.text = suggestion.price.toString();
-                    _quantityFocus.requestFocus();
-                  },
-                  builder: (context, controller, focusNode) => TextField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    decoration: const InputDecoration(
-                      labelText: 'Item Name',
-                      prefixIcon: Icon(Icons.inventory_2_outlined),
-                    ),
-                    textCapitalization: TextCapitalization.words,
-                    onSubmitted: (_) => _quantityFocus.requestFocus(),
-                  ),
-                );
-              },
-            ),
+  builder: (context, productProvider, _) {
+    return TypeAheadField<Product>(
+      controller: _itemNameController,
+      focusNode: _itemNameFocus,
+      suggestionsCallback: (pattern) async {
+        final trimmed = pattern.trim();
+        if (trimmed.isEmpty) {
+          // Show top 10 most used when field focused
+          return productProvider.products.take(10).toList();
+        }
+        return await productProvider.searchProducts(trimmed);
+      },
+      itemBuilder: (context, suggestion) => ListTile(
+        dense: true,
+        title: Text(suggestion.name),
+        trailing: Text('₹${suggestion.price.toStringAsFixed(0)}'),
+      ),
+      onSelected: (suggestion) {
+        _itemNameController.text = suggestion.name;
+        _priceController.text = suggestion.price.toString();
+        _quantityFocus.requestFocus();
+      },
+      builder: (context, controller, focusNode) => TextField(
+        controller: controller,
+        focusNode: focusNode,
+        decoration: const InputDecoration(
+          labelText: 'Item Name',
+          prefixIcon: Icon(Icons.inventory_2_outlined),
+        ),
+        textCapitalization: TextCapitalization.words,
+        onSubmitted: (_) => _quantityFocus.requestFocus(),
+      ),
+    );
+  },
+),
             const SizedBox(height: 16),
             TextField(
               controller: _quantityController,

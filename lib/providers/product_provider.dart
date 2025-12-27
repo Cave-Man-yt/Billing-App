@@ -30,18 +30,20 @@ class ProductProvider with ChangeNotifier {
   }
 
   Future<List<Product>> searchProducts(String query) async {
-    if (query.isEmpty) return [];
+  final lower = query.toLowerCase().trim();
 
-    // Fast in-memory filter first to avoid DB round-trips for short queries
-    final lower = query.toLowerCase();
+  // Always try in-memory first — even if query empty or short
+  if (_products.isNotEmpty) {
     final matches = _products.where((p) => p.name.toLowerCase().contains(lower)).toList();
     if (matches.isNotEmpty) {
       return matches.take(10).toList();
     }
-
-    // Fallback to DB search
-    return await DatabaseService.instance.searchProducts(query);
   }
+
+  // Only fallback to DB if no in-memory matches
+  if (lower.isEmpty) return [];
+  return await DatabaseService.instance.searchProducts(lower);
+}
 
   Future<void> addOrUpdateProduct(Product product) async {
     try {
