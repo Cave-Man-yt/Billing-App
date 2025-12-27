@@ -14,7 +14,8 @@ import 'services/database_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Force landscape orientation for tablet
+  // Force landscape orientation for 
+  // 01tablet
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.landscapeRight,
     DeviceOrientation.landscapeLeft,
