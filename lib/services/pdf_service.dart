@@ -56,183 +56,127 @@ class PdfService {
   }
 
   static Future<Uint8List> _buildPdfBytes(
-    BuildContext context,
-    Bill bill,
-    List<BillItem> items,
-  ) async {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
-    final pdf = pw.Document();
+  BuildContext context,
+  Bill bill,
+  List<BillItem> items,
+) async {
+  final settings = Provider.of<SettingsProvider>(context, listen: false);
+  final pdf = pw.Document();
 
-    final hasBalance = bill.previousBalance > 0.01 || bill.newBalance > 0.01;
+  final hasBalance = bill.previousBalance > 0.01 || bill.newBalance > 0.01;
 
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        theme: pw.ThemeData.withFont(base: regular, bold: bold),
-        build: (pw.Context ctx) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
+  pdf.addPage(
+    pw.MultiPage(  // ← Switched to MultiPage for 100+ items auto-paginate
+      pageFormat: PdfPageFormat.a4,
+      theme: pw.ThemeData.withFont(base: regular, bold: bold),
+      build: (pw.Context ctx) {
+        return [
+          // Header
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              // Header
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text(settings.shopName,
-                          style: pw.TextStyle(font: bold, fontSize: 24)),
-                      if (settings.shopAddress.isNotEmpty) pw.Text(settings.shopAddress),
-                      if (settings.shopPhone.isNotEmpty) pw.Text('Ph: ${settings.shopPhone}'),
-                      if (settings.shopEmail.isNotEmpty) pw.Text(settings.shopEmail),
-                    ],
-                  ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      pw.Text('INVOICE', style: pw.TextStyle(font: bold, fontSize: 20)),
-                      pw.Text('No: ${bill.billNumber}'),
-                      pw.Text('Date: ${DateFormat('dd/MM/yyyy').format(bill.createdAt)}'),
-                    ],
-                  ),
+                  pw.Text(settings.shopName,
+                      style: pw.TextStyle(font: bold, fontSize: 24)),
+                  if (settings.shopAddress.isNotEmpty) pw.Text(settings.shopAddress),
+                  if (settings.shopPhone.isNotEmpty) pw.Text('Ph: ${settings.shopPhone}'),
+                  if (settings.shopEmail.isNotEmpty) pw.Text(settings.shopEmail),
                 ],
               ),
-              pw.SizedBox(height: 20),
-
-              // Bill To + Balance Badge
-              pw.Container(
-                padding: const pw.EdgeInsets.all(10),
-                decoration: pw.BoxDecoration(border: pw.Border.all()),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text('Bill To:', style: pw.TextStyle(font: bold, fontSize: 12)),
-                        pw.Text(bill.customerName, style: const pw.TextStyle(fontSize: 14)),
-                        if (bill.customerCity != null) pw.Text(bill.customerCity!),
-                      ],
-                    ),
-                    if (hasBalance)
-                      pw.Container(
-                        padding: const pw.EdgeInsets.all(8),
-                        decoration: pw.BoxDecoration(
-                          color: PdfColors.orange50,
-                          border: pw.Border.all(color: PdfColors.orange),
-                          borderRadius: pw.BorderRadius.circular(4),
-                        ),
-                        child: pw.Text('BALANCE CUSTOMER',
-                            style: pw.TextStyle(font: bold, fontSize: 10, color: PdfColors.orange900)),
-                      ),
-                  ],
-                ),
-              ),
-              pw.SizedBox(height: 20),
-
-              // Items Table
-              pw.Table(
-                border: pw.TableBorder.all(),
-                columnWidths: {
-                  0: const pw.FlexColumnWidth(3),
-                  1: const pw.FlexColumnWidth(1),
-                  2: const pw.FlexColumnWidth(1.5),
-                  3: const pw.FlexColumnWidth(1.5),
-                },
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
-                  pw.TableRow(
-                    decoration: const pw.BoxDecoration(color: PdfColors.grey300),
-                    children: [
-                      _cell('Item', header: true),
-                      _cell('Qty', header: true, align: pw.TextAlign.center),
-                      _cell('Price', header: true, align: pw.TextAlign.right),
-                      _cell('Total', header: true, align: pw.TextAlign.right),
-                    ],
-                  ),
-                  ...items.map((item) => pw.TableRow(children: [
-                        _cell(item.productName),
-                        _cell(item.quantity.toStringAsFixed(0), align: pw.TextAlign.center),
-                        _cell('₹${item.price.toStringAsFixed(2)}', align: pw.TextAlign.right),
-                        _cell('₹${item.total.toStringAsFixed(2)}', align: pw.TextAlign.right),
-                      ])),
+                  pw.Text('INVOICE', style: pw.TextStyle(font: bold, fontSize: 20)),
+                  pw.Text('No: ${bill.billNumber}'),
+                  pw.Text('Date: ${DateFormat('dd/MM/yyyy').format(bill.createdAt)}'),
                 ],
-              ),
-              pw.SizedBox(height: 20),
-
-              // Summary
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.end,
-                children: [
-                  pw.Container(
-                    width: 250,
-                    child: pw.Column(
-                      children: [
-                        _summaryRow('Subtotal:', '₹${bill.subtotal.toStringAsFixed(2)}'),
-                        if (bill.discount > 0)
-                          _summaryRow('Discount:', '-₹${bill.discount.toStringAsFixed(2)}'),
-                        pw.Divider(),
-                        _summaryRow('Bill Total:', '₹${bill.total.toStringAsFixed(2)}', bold: true),
-                        if (hasBalance) ...[
-                          pw.SizedBox(height: 10),
-                          pw.Container(
-                            padding: const pw.EdgeInsets.all(10),
-                            decoration: pw.BoxDecoration(
-                              color: PdfColors.orange50,
-                              border: pw.Border.all(color: PdfColors.orange),
-                              borderRadius: pw.BorderRadius.circular(4),
-                            ),
-                            child: pw.Column(children: [
-                              if (bill.previousBalance > 0.01)
-                                _summaryRow('Previous Balance:', '₹${bill.previousBalance.toStringAsFixed(2)}'),
-                              _summaryRow('Grand Total:', '₹${bill.grandTotal.toStringAsFixed(2)}', bold: true),
-                              pw.Divider(color: PdfColors.orange),
-                              _summaryRow('Amount Paid:', '₹${bill.amountPaid.toStringAsFixed(2)}', color: PdfColors.green),
-                              _summaryRow(
-                                'New Balance:',
-                                '₹${bill.newBalance.toStringAsFixed(2)}',
-                                bold: true,
-                                color: bill.newBalance > 0 ? PdfColors.red : PdfColors.green,
-                              ),
-                            ]),
-                          ),
-                        ] else if (bill.amountPaid > 0.01) ...[
-                          pw.SizedBox(height: 10),
-                          _summaryRow('Amount Paid:', '₹${bill.amountPaid.toStringAsFixed(2)}', color: PdfColors.green),
-                          if (bill.amountPaid < bill.total)
-                            _summaryRow(
-                              'Balance Due:',
-                              '₹${(bill.total - bill.amountPaid).toStringAsFixed(2)}',
-                              color: PdfColors.red,
-                            ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-
-              pw.Spacer(),
-
-              // Footer
-              pw.Center(
-                child: pw.Column(children: [
-                  if (hasBalance && bill.newBalance > 0.01)
-                    pw.Text(
-                      'Outstanding Balance: ₹${bill.newBalance.toStringAsFixed(2)}',
-                      style: pw.TextStyle(font: bold, fontSize: 12, color: PdfColors.red),
-                    ),
-                  pw.SizedBox(height: 8),
-                  pw.Text('Thank you for your business!'),
-                ]),
               ),
             ],
-          );
-        },
-      ),
-    );
+          ),
+          pw.SizedBox(height: 20),
 
-    return pdf.save();
-  }
+          // Bill To (no balance tag — unified)
+          pw.Container(
+            padding: const pw.EdgeInsets.all(10),
+            decoration: pw.BoxDecoration(border: pw.Border.all()),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text('Bill To:', style: pw.TextStyle(font: bold, fontSize: 12)),
+                pw.Text(bill.customerName, style: const pw.TextStyle(fontSize: 14)),
+                if (bill.customerCity != null) pw.Text(bill.customerCity!),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 20),
+
+          // Items Table (B&W, overflows to next page automatically via MultiPage)
+          pw.Table(
+            border: pw.TableBorder.all(),
+            columnWidths: {
+              0: const pw.FlexColumnWidth(3),
+              1: const pw.FlexColumnWidth(1),
+              2: const pw.FlexColumnWidth(1.5),
+              3: const pw.FlexColumnWidth(1.5),
+            },
+            children: [
+              pw.TableRow(
+                decoration: const pw.BoxDecoration(color: PdfColors.grey300),  // Light grey for header only
+                children: [
+                  _cell('Item', header: true),
+                  _cell('Qty', header: true, align: pw.TextAlign.center),
+                  _cell('Price', header: true, align: pw.TextAlign.right),
+                  _cell('Total', header: true, align: pw.TextAlign.right),
+                ],
+              ),
+              ...items.map((item) => pw.TableRow(children: [
+                    _cell(item.productName),
+                    _cell(item.quantity.toStringAsFixed(0), align: pw.TextAlign.center),
+                    _cell('${item.price.toStringAsFixed(2)}', align: pw.TextAlign.right),
+                    _cell('${item.total.toStringAsFixed(2)}', align: pw.TextAlign.right),
+                  ])),
+            ],
+          ),
+          pw.SizedBox(height: 20),
+
+          // Unified Summary (B&W, always shows final balance)
+          pw.Align(
+            alignment: pw.Alignment.centerRight,
+            child: pw.Container(
+              width: 250,
+              child: pw.Column(
+                children: [
+                  _summaryRow('Subtotal:', '${bill.subtotal.toStringAsFixed(2)}'),
+                  if (bill.discount > 0)
+                    _summaryRow('Discount:', '-${bill.discount.toStringAsFixed(2)}'),
+                  pw.Divider(),
+                  _summaryRow('Bill Total:', '${bill.total.toStringAsFixed(2)}', bold: true),
+                  pw.SizedBox(height: 10),
+                  _summaryRow('Previous Balance:', '${bill.previousBalance.toStringAsFixed(2)}'),
+                  _summaryRow('Grand Total:', '${bill.grandTotal.toStringAsFixed(2)}', bold: true),
+                  pw.Divider(),
+                  _summaryRow('Amount Paid:', '${bill.amountPaid.toStringAsFixed(2)}'),
+                  _summaryRow('Final Balance:', '${bill.newBalance.toStringAsFixed(2)}', bold: true),
+                ],
+              ),
+            ),
+          ),
+
+          pw.Spacer(),
+
+          // Footer (B&W)
+          pw.Center(
+            child: pw.Text('Thank you for your business!'),
+          ),
+        ];
+      },
+    ),
+  );
+
+  return pdf.save();
+}
 
   static pw.Widget _cell(String text,
     {bool header = false, pw.TextAlign align = pw.TextAlign.left}) {

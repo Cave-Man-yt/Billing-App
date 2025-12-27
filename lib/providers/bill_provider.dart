@@ -46,11 +46,13 @@ class BillProvider with ChangeNotifier {
     _isLoading = false;
     notifyListeners();
   }
+  
 
   void addBillItem(BillItem item) {
     _currentBillItems.add(item);
     notifyListeners();
   }
+
 
   void updateBillItem(int index, BillItem item) {
     if (index >= 0 && index < _currentBillItems.length) {

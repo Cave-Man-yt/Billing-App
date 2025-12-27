@@ -45,6 +45,42 @@ class ProductProvider with ChangeNotifier {
   return await DatabaseService.instance.searchProducts(lower);
 }
 
+Future<void> upsertProductPrice(String name, double price) async {
+  final lowerName = name.toLowerCase().trim();
+  final existing = _products.where((p) => p.name.toLowerCase() == lowerName).toList();
+
+  if (existing.isNotEmpty) {
+    final product = existing.first;
+
+    final updatedProduct = product.copyWith(
+      price: price,
+      lastUsed: DateTime.now(),
+      usageCount: product.usageCount + 1,
+    );
+
+    // Replace in the list
+    final index = _products.indexOf(product);
+    if (index != -1) {
+      _products[index] = updatedProduct;
+    }
+
+    // Update DB
+    await DatabaseService.instance.upsertProduct(updatedProduct);
+  } else {
+    // New product
+    final newProduct = Product(
+      name: name.trim(),
+      price: price,
+      lastUsed: DateTime.now(),
+      usageCount: 1,
+    );
+    await DatabaseService.instance.upsertProduct(newProduct);
+    _products.add(newProduct);
+  }
+
+  notifyListeners();
+}
+
   Future<void> addOrUpdateProduct(Product product) async {
     try {
       await DatabaseService.instance.upsertProduct(product);

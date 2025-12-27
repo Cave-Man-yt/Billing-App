@@ -59,29 +59,34 @@ class _BillingScreenState extends State<BillingScreen> {
     super.dispose();
   }
 
-  void _addOrUpdateItem() {
-    final name = _itemNameController.text.trim();
-    final qtyText = _quantityController.text.trim();
-    final qty = qtyText.isEmpty ? 1.0 : (double.tryParse(qtyText) ?? 0.0);
-    final price = double.tryParse(_priceController.text) ?? 0.0;
+  void _addOrUpdateItem() async {
+  final name = _itemNameController.text.trim();
+  final qtyText = _quantityController.text.trim();
+  final qty = qtyText.isEmpty ? 1.0 : (double.tryParse(qtyText) ?? 0.0);
+  final price = double.tryParse(_priceController.text) ?? 0.0;
 
-    if (name.isEmpty || qty <= 0 || price <= 0) return;
+  if (name.isEmpty || qty <= 0 || price <= 0) return;
 
-    final item = BillItem(productName: name, quantity: qty, price: price);
-    final billProvider = Provider.of<BillProvider>(context, listen: false);
+  final item = BillItem(productName: name, quantity: qty, price: price);
+  final billProvider = Provider.of<BillProvider>(context, listen: false);
 
-    if (_editingIndex != null) {
-      billProvider.updateBillItem(_editingIndex!, item);
-      setState(() => _editingIndex = null);
-    } else {
-      billProvider.addBillItem(item);
-    }
-
-    _itemNameController.clear();
-    _quantityController.clear();
-    _priceController.clear();
-    _itemNameFocus.requestFocus();
+  if (_editingIndex != null) {
+    billProvider.updateBillItem(_editingIndex!, item);
+    setState(() => _editingIndex = null);
+  } else {
+    billProvider.addBillItem(item);
   }
+
+  // Update product price in suggestions immediately
+  final productProvider = Provider.of<ProductProvider>(context, listen: false);
+  await productProvider.upsertProductPrice(name, price);
+
+  // Reset fields
+  _itemNameController.clear();
+  _quantityController.clear();
+  _priceController.clear();
+  _itemNameFocus.requestFocus();
+}
 
   void _editItem(int index, BillItem item) {
     setState(() {

@@ -34,4 +34,21 @@ class Product {
       usageCount: map['usage_count'] as int? ?? 1,
     );
   }
+
+    Product copyWith({
+    int? id,
+    String? name,
+    double? price,
+    DateTime? lastUsed,
+    int? usageCount,
+  }) {
+    return Product(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      price: price ?? this.price,
+      lastUsed: lastUsed ?? this.lastUsed,
+      usageCount: usageCount ?? this.usageCount,
+    );
+  }
+  
 }
