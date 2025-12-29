@@ -7,7 +7,7 @@ import '../models/bill_model.dart';
 import '../utils/app_theme.dart';
 import '../services/pdf_service.dart';
 import '../services/database_service.dart';
-import 'billing_screen.dart';
+import 'home_screen.dart';  // ← CHANGE: Import home_screen instead of billing_screen
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -56,21 +56,36 @@ class _HistoryScreenState extends State<HistoryScreen> {
     ),
   );
 
-  if (confirm == true) {
-    await DatabaseService.instance.deleteBill(billId);
-    if (mounted) {
-      final billProvider = Provider.of<BillProvider>(context, listen: false);
-      await billProvider.loadBills();
-      _loadBills();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bill deleted successfully')),
-        );
-      }
-    }
+  if (confirm != true) return;  // ← Early return if cancelled
+  
+  if (!mounted) return;  // ← Check mounted before proceeding
+  
+  final billProvider = Provider.of<BillProvider>(context, listen: false);
+  
+  // Check if the deleted bill is currently loaded in billing screen
+  final isCurrentlyEditing = billProvider.isEditingExistingBill && 
+                              billProvider.editingBillId == billId;
+  
+  await DatabaseService.instance.deleteBill(billId);
+  
+  if (!mounted) return;  // ← Check mounted after async operation
+  
+  await billProvider.loadBills();
+  _loadBills();
+  
+  // If the deleted bill was being edited, clear the billing screen
+  if (isCurrentlyEditing) {
+    billProvider.clearCurrentBill();
+  }
+  
+  if (mounted) {  // ← Check mounted before showing snackbar
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Bill deleted successfully')),
+    );
   }
 }
 
+  // ← SIMPLIFIED: Just load the bill and switch to billing tab
   Future<void> _openBillForEditing(Bill bill) async {
     final billProvider = Provider.of<BillProvider>(context, listen: false);
     final items = await billProvider.getBillItems(bill.id!);
@@ -80,14 +95,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
     billProvider.loadBillForEditing(bill, items);
     billProvider.startEditingExistingBill(bill.id!);
 
+    // ← NEW: Navigate to home screen and switch to billing tab (index 0)
     if (mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const BillingScreen()),
-      ).then((_) {
-        billProvider.loadBills();
-        _loadBills();
-      });
+      // Pop until we reach the home screen
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      
+      // Use a small delay to ensure the navigation completes
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      // Access the HomeScreen state and switch to billing tab
+      if (mounted) {
+        final homeScreenState = context.findAncestorStateOfType<HomeScreenState>();
+        homeScreenState?.switchToTab(0);
+      }
     }
   }
 

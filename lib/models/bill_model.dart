@@ -7,7 +7,8 @@ class Bill {
   final String? customerCity;
   final bool isCredit;
   final double subtotal;
-  final double discount;
+  final double packageCharge;
+  final int boxCount;
   final double total;
 
   // Transient fields - NOT final so copyWith can override them
@@ -26,7 +27,8 @@ class Bill {
     this.customerCity,
     this.isCredit = false,
     required this.subtotal,
-    this.discount = 0.0,
+    this.packageCharge = 0.0,
+    this.boxCount = 0,
     required this.total,
     this.amountPaid = 0.0,
     this.previousBalance = 0.0,
@@ -43,7 +45,8 @@ class Bill {
     String? customerCity,
     bool? isCredit,
     double? subtotal,
-    double? discount,
+    double? packageCharge,
+    int? boxCount,
     double? total,
     double? amountPaid,
     double? previousBalance,
@@ -59,7 +62,8 @@ class Bill {
       customerCity: customerCity ?? this.customerCity,
       isCredit: isCredit ?? this.isCredit,
       subtotal: subtotal ?? this.subtotal,
-      discount: discount ?? this.discount,
+      packageCharge: packageCharge ?? this.packageCharge,
+      boxCount: boxCount ?? this.boxCount,
       total: total ?? this.total,
       amountPaid: amountPaid ?? this.amountPaid,
       previousBalance: previousBalance ?? this.previousBalance,
@@ -78,8 +82,12 @@ class Bill {
       'customer_city': customerCity,
       'is_credit': isCredit ? 1 : 0,
       'subtotal': subtotal,
-      'discount': discount,
+      'package_charge': packageCharge,
+      'box_count': boxCount,
       'total': total,
+      'amount_paid': amountPaid,           // ← ADD THIS
+      'previous_balance': previousBalance,  // ← ADD THIS
+      'new_balance': newBalance,           // ← ADD THIS
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -93,13 +101,14 @@ class Bill {
       customerCity: map['customer_city'] as String?,
       isCredit: (map['is_credit'] as int?) == 1,
       subtotal: (map['subtotal'] as num).toDouble(),
-      discount: (map['discount'] as num?)?.toDouble() ?? 0.0,
+      packageCharge: (map['package_charge'] as num?)?.toDouble() ?? 0.0,
+      boxCount: (map['box_count'] as int?) ?? 0,
       total: (map['total'] as num).toDouble(),
-      // Transient defaults when loading from DB
-      amountPaid: 0.0,
-      previousBalance: 0.0,
-      newBalance: 0.0,
-      grandTotal: 0.0,
+      // ← CHANGED: Load these from DB instead of defaulting to 0
+      amountPaid: (map['amount_paid'] as num?)?.toDouble() ?? 0.0,
+      previousBalance: (map['previous_balance'] as num?)?.toDouble() ?? 0.0,
+      newBalance: (map['new_balance'] as num?)?.toDouble() ?? 0.0,
+      grandTotal: 0.0,  // This can be calculated on the fly
       createdAt: DateTime.parse(map['created_at'] as String),
     );
   }

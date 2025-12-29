@@ -12,10 +12,10 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> createState() => HomeScreenState();  // ← CHANGE: Remove underscore to make it public
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class HomeScreenState extends State<HomeScreen> {  // ← CHANGE: Remove underscore
   int _currentIndex = 0;
 
   // Navigation screens
@@ -25,6 +25,15 @@ class _HomeScreenState extends State<HomeScreen> {
     CustomersScreen(),
     SettingsScreen(),
   ];
+
+  // ← NEW: Method to switch tabs programmatically
+  void switchToTab(int index) {
+    if (index >= 0 && index < _screens.length) {
+      setState(() {
+        _currentIndex = index;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -108,31 +108,40 @@ class PdfService {
             ),
             pw.SizedBox(height: 20),
 
-            // Items Table
+            // Items Table - ← UPDATED with S.No column
             pw.Table(
               border: pw.TableBorder.all(),
               columnWidths: {
-                0: const pw.FlexColumnWidth(3),
-                1: const pw.FlexColumnWidth(1),
-                2: const pw.FlexColumnWidth(1.5),
-                3: const pw.FlexColumnWidth(1.5),
+                0: const pw.FlexColumnWidth(0.7), // ← NEW: S.No column
+                1: const pw.FlexColumnWidth(3),   // Item
+                2: const pw.FlexColumnWidth(1),   // Qty
+                3: const pw.FlexColumnWidth(1.5), // Price
+                4: const pw.FlexColumnWidth(1.5), // Total
               },
               children: [
+                // Header row
                 pw.TableRow(
                   decoration: const pw.BoxDecoration(color: PdfColors.grey300),
                   children: [
+                    _cell('S.No', header: true, align: pw.TextAlign.center), // ← NEW
                     _cell('Item', header: true),
                     _cell('Qty', header: true, align: pw.TextAlign.center),
                     _cell('Price', header: true, align: pw.TextAlign.right),
                     _cell('Total', header: true, align: pw.TextAlign.right),
                   ],
                 ),
-                ...items.map((item) => pw.TableRow(children: [
-                      _cell(item.productName),
-                      _cell(item.quantity.toStringAsFixed(0), align: pw.TextAlign.center),
-                      _cell(item.price.toStringAsFixed(2), align: pw.TextAlign.right),
-                      _cell(item.total.toStringAsFixed(2), align: pw.TextAlign.right),
-                    ])),
+                // Data rows - ← UPDATED with serial numbers
+                ...items.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final item = entry.value;
+                  return pw.TableRow(children: [
+                    _cell('${index + 1}', align: pw.TextAlign.center), // ← NEW: Serial number
+                    _cell(item.productName),
+                    _cell(item.quantity.toStringAsFixed(0), align: pw.TextAlign.center),
+                    _cell(item.price.toStringAsFixed(2), align: pw.TextAlign.right),
+                    _cell(item.total.toStringAsFixed(2), align: pw.TextAlign.right),
+                  ]);
+                }),
               ],
             ),
             pw.SizedBox(height: 20),
@@ -145,8 +154,10 @@ class PdfService {
                 child: pw.Column(
                   children: [
                     _summaryRow('Subtotal:', bill.subtotal.toStringAsFixed(2)),
-                    if (bill.discount > 0)
-                      _summaryRow('Discount:', '-${bill.discount.toStringAsFixed(2)}'),
+                    if (bill.packageCharge > 0)
+                      _summaryRow('Package Charge:', '+${bill.packageCharge.toStringAsFixed(2)}'),
+                    if (bill.boxCount > 0)
+                      _summaryRow('No. of Boxes:', '${bill.boxCount}'),
                     pw.Divider(),
                     _summaryRow('Bill Total:', bill.total.toStringAsFixed(2), bold: true),
                     pw.SizedBox(height: 10),

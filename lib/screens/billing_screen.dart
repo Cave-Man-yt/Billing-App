@@ -24,7 +24,8 @@ class _BillingScreenState extends State<BillingScreen> {
   final _itemNameController = TextEditingController();
   final _quantityController = TextEditingController();
   final _priceController = TextEditingController();
-  final _discountController = TextEditingController();
+  final _packageChargeController = TextEditingController();
+  final _boxCountController = TextEditingController();
   final _amountPaidController = TextEditingController();
   final _itemNameFocus = FocusNode();
   final _quantityFocus = FocusNode();
@@ -34,15 +35,34 @@ class _BillingScreenState extends State<BillingScreen> {
   bool _isProcessing = false;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final billProvider = Provider.of<BillProvider>(context, listen: false);
-      _discountController.text = billProvider.discount.toStringAsFixed(2);
+void initState() {
+  super.initState();
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    final billProvider = Provider.of<BillProvider>(context, listen: false);
+    _packageChargeController.text = billProvider.packageCharge.toStringAsFixed(2);
+    _boxCountController.text = billProvider.boxCount.toString();
+    
+    // ← CHANGED: Get amount paid from the original bill if editing
+    if (billProvider.isEditingExistingBill && billProvider.editingBillId != null) {
+      final originalBill = billProvider.bills.firstWhere(
+        (b) => b.id == billProvider.editingBillId,
+        orElse: () => Bill(
+          billNumber: '',
+          customerName: '',
+          subtotal: 0.0,
+          total: 0.0,
+        ),
+      );
+      _amountPaidController.text = originalBill.amountPaid.toStringAsFixed(2);
+    }
+  });
+    _packageChargeController.addListener(() {
+      final value = double.tryParse(_packageChargeController.text) ?? 0.0;
+      Provider.of<BillProvider>(context, listen: false).setPackageCharge(value);
     });
-    _discountController.addListener(() {
-      final value = double.tryParse(_discountController.text) ?? 0.0;
-      Provider.of<BillProvider>(context, listen: false).setDiscount(value);
+    _boxCountController.addListener(() {
+      final value = int.tryParse(_boxCountController.text) ?? 0;
+      Provider.of<BillProvider>(context, listen: false).setBoxCount(value);
     });
   }
 
@@ -51,7 +71,8 @@ class _BillingScreenState extends State<BillingScreen> {
     _itemNameController.dispose();
     _quantityController.dispose();
     _priceController.dispose();
-    _discountController.dispose();
+    _packageChargeController.dispose();
+    _boxCountController.dispose();
     _amountPaidController.dispose();
     _itemNameFocus.dispose();
     _quantityFocus.dispose();
@@ -140,7 +161,8 @@ class _BillingScreenState extends State<BillingScreen> {
       await PdfService.generateAndPrintBill(context, bill, itemsCopy);
 
       billProvider.clearCurrentBill();
-      _discountController.clear();
+      _packageChargeController.clear();
+      _boxCountController.clear();
       _amountPaidController.clear();
 
       if (mounted) {
@@ -198,7 +220,8 @@ class _BillingScreenState extends State<BillingScreen> {
       );
 
       billProvider.clearCurrentBill();
-      _discountController.clear();
+      _packageChargeController.clear();
+      _boxCountController.clear();
       _amountPaidController.clear();
 
       if (mounted) {
@@ -224,25 +247,45 @@ class _BillingScreenState extends State<BillingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Consumer<BillProvider>(
-          builder: (context, billProvider, _) {
-            if (billProvider.isEditingExistingBill && billProvider.editingBillId != null) {
-              final originalBill = billProvider.bills.firstWhere(
-                (b) => b.id == billProvider.editingBillId,
-                orElse: () => Bill(
-                  billNumber: 'Unknown',
-                  customerName: '',
-                  subtotal: 0.0,
-                  discount: 0.0,
-                  total: 0.0,
-                ),
+  title: Consumer<BillProvider>(
+    builder: (context, billProvider, _) {
+      if (billProvider.isEditingExistingBill && billProvider.editingBillId != null) {
+        final originalBill = billProvider.bills.firstWhere(
+          (b) => b.id == billProvider.editingBillId,
+          orElse: () => Bill(
+            billNumber: 'Unknown',
+            customerName: '',
+            subtotal: 0.0,
+            packageCharge: 0.0,
+            total: 0.0,
+          ),
+        );
+        return Text('Edit Bill - ${originalBill.billNumber}');
+      }
+      return const Text('New Estimate');
+    },
+  ),
+  // ← NEW: Add action button to cancel editing
+  actions: [
+    Consumer<BillProvider>(
+      builder: (context, billProvider, _) {
+        if (billProvider.isEditingExistingBill) {
+          return TextButton.icon(
+            onPressed: () {
+              billProvider.clearCurrentBill();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Edit cancelled - ready for new bill')),
               );
-              return Text('Edit Bill - ${originalBill.billNumber}');
-            }
-            return const Text('New Estimate');
-          },
-        ),
-      ),
+            },
+            icon: const Icon(Icons.close, color: Colors.white),
+            label: const Text('Cancel Edit', style: TextStyle(color: Colors.white)),
+          );
+        }
+        return const SizedBox.shrink();
+      },
+    ),
+  ],
+),
       body: Row(
         children: [
           Expanded(flex: 4, child: _buildItemEntrySection()),
@@ -412,16 +455,39 @@ class _BillingScreenState extends State<BillingScreen> {
           ),
           child: Column(
             children: [
-              TextField(
-                controller: _discountController,
-                decoration: const InputDecoration(
-                  labelText: 'Discount',
-                  prefixIcon: Icon(Icons.local_offer_outlined),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                ),
-                style: const TextStyle(fontSize: 14),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+              // Package Charge and Box Count side by side
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: _packageChargeController,
+                      decoration: const InputDecoration(
+                        labelText: 'Package Charge',
+                        prefixIcon: Icon(Icons.local_shipping_outlined),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                      style: const TextStyle(fontSize: 14),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 1,
+                    child: TextField(
+                      controller: _boxCountController,
+                      decoration: const InputDecoration(
+                        labelText: 'Boxes',
+                        prefixIcon: Icon(Icons.inventory_2_outlined),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                      style: const TextStyle(fontSize: 14),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               TextField(
@@ -438,8 +504,8 @@ class _BillingScreenState extends State<BillingScreen> {
               ),
               const SizedBox(height: 8),
               _summaryRow('Subtotal:', billProvider.subtotal.toStringAsFixed(2), fontSize: 14),
-              if (billProvider.discount > 0)
-                _summaryRow('Discount:', '-${billProvider.discount.toStringAsFixed(2)}', color: AppTheme.successColor, fontSize: 14),
+              if (billProvider.packageCharge > 0)
+                _summaryRow('Package Charge:', '+${billProvider.packageCharge.toStringAsFixed(2)}', color: AppTheme.warningColor, fontSize: 14),
               const Divider(height: 12),
               _summaryRow('Bill Total:', billProvider.total.toStringAsFixed(2), isBold: true, fontSize: 16),
               const SizedBox(height: 8),

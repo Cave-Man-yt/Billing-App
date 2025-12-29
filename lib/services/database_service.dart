@@ -30,42 +30,76 @@ class DatabaseService {
       path,
       version: 1,
       onCreate: _createDB,
-      onOpen: (db) async {
-        // Ensure migrations for customers table: add `city` and `balance` if missing.
-        try {
-          final cols = await db.rawQuery("PRAGMA table_info(customers);");
-          final names = cols.map((r) => r['name'] as String).toSet();
-          if (!names.contains('city')) {
-            await db.execute("ALTER TABLE customers ADD COLUMN city TEXT;");
-          }
-          if (!names.contains('balance')) {
-            await db.execute("ALTER TABLE customers ADD COLUMN balance REAL DEFAULT 0.0;");
-            // If the old schema had current_credit, copy it into balance
-            if (names.contains('current_credit')) {
-              await db.execute('UPDATE customers SET balance = current_credit;');
-            }
-          }
-        } catch (e) {
-          // ignore migration errors; table may not exist yet
-        }
-        // Ensure bills table contains expected optional columns (customer_city etc.)
-        try {
-          final billCols = await db.rawQuery("PRAGMA table_info(bills);");
-          final billNames = billCols.map((r) => r['name'] as String).toSet();
-          if (!billNames.contains('customer_city')) {
-            await db.execute("ALTER TABLE bills ADD COLUMN customer_city TEXT;");
-          }
-          // If other optional columns were added in newer schema, add them defensively
-          if (!billNames.contains('customer_phone')) {
-            await db.execute("ALTER TABLE bills ADD COLUMN customer_phone TEXT;");
-          }
-          if (!billNames.contains('customer_address')) {
-            await db.execute("ALTER TABLE bills ADD COLUMN customer_address TEXT;");
-          }
-        } catch (e) {
-          // ignore; bills table may not exist yet
-        }
-      },
+      // In the openDatabase onOpen callback, add this migration:
+onOpen: (db) async {
+  // Existing customer migrations...
+  try {
+    final cols = await db.rawQuery("PRAGMA table_info(customers);");
+    final names = cols.map((r) => r['name'] as String).toSet();
+    if (!names.contains('city')) {
+      await db.execute("ALTER TABLE customers ADD COLUMN city TEXT;");
+    }
+    if (!names.contains('balance')) {
+      await db.execute("ALTER TABLE customers ADD COLUMN balance REAL DEFAULT 0.0;");
+      if (names.contains('current_credit')) {
+        await db.execute('UPDATE customers SET balance = current_credit;');
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+  
+  // NEW: Migrate discount to package_charge
+  try {
+    final billCols = await db.rawQuery("PRAGMA table_info(bills);");
+    final billNames = billCols.map((r) => r['name'] as String).toSet();
+    
+    // If old discount column exists, rename it to package_charge
+    if (billNames.contains('discount') && !billNames.contains('package_charge')) {
+      // SQLite doesn't support RENAME COLUMN in older versions, so we migrate data
+      await db.execute("ALTER TABLE bills ADD COLUMN package_charge REAL DEFAULT 0.0;");
+      await db.execute('UPDATE bills SET package_charge = discount;');
+      // Note: We keep the old discount column for compatibility
+    } else if (!billNames.contains('package_charge')) {
+      await db.execute("ALTER TABLE bills ADD COLUMN package_charge REAL DEFAULT 0.0;");
+    }
+
+    if(!billNames.contains('box_count')) {
+      await db.execute("ALTER TABLE bills ADD COLUMN box_count INTEGER DEFAULT 0;");
+    }
+    
+    if (!billNames.contains('customer_city')) {
+      await db.execute("ALTER TABLE bills ADD COLUMN customer_city TEXT;");
+    }
+    if (!billNames.contains('customer_phone')) {
+      await db.execute("ALTER TABLE bills ADD COLUMN customer_phone TEXT;");
+    }
+    if (!billNames.contains('customer_address')) {
+      await db.execute("ALTER TABLE bills ADD COLUMN customer_address TEXT;");
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  try {
+    final billCols = await db.rawQuery("PRAGMA table_info(bills);");
+    final billNames = billCols.map((r) => r['name'] as String).toSet();
+    
+    if (!billNames.contains('amount_paid')) {
+      await db.execute("ALTER TABLE bills ADD COLUMN amount_paid REAL DEFAULT 0.0;");
+    }
+    if (!billNames.contains('previous_balance')) {
+      await db.execute("ALTER TABLE bills ADD COLUMN previous_balance REAL DEFAULT 0.0;");
+    }
+    if (!billNames.contains('new_balance')) {
+      await db.execute("ALTER TABLE bills ADD COLUMN new_balance REAL DEFAULT 0.0;");
+    }
+    
+    // ... rest of existing migrations for package_charge, box_count, etc ...
+  } catch (e) {
+    // ignore
+  }
+},                                
     );
   }
 
@@ -106,8 +140,12 @@ class DatabaseService {
         customer_address TEXT,
         is_credit INTEGER NOT NULL DEFAULT 0,
         subtotal REAL NOT NULL,
-        discount REAL DEFAULT 0.0,
+        package_charge REAL DEFAULT 0.0,
+        box_count INTEGER DEFAULT 0,
         total REAL NOT NULL,
+        amount_paid REAL DEFAULT 0.0,
+        previous_balance REAL DEFAULT 0.0,
+        new_balance REAL DEFAULT 0.0,
         created_at TEXT NOT NULL,
         FOREIGN KEY (customer_id) REFERENCES customers (id)
       )
