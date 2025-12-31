@@ -162,7 +162,14 @@ class PdfService {
                     _summaryRow('Bill Total:', bill.total.toStringAsFixed(2), bold: true),
                     pw.SizedBox(height: 10),
                     _summaryRow('Previous Balance:', bill.previousBalance.toStringAsFixed(2)),
-                    _summaryRow('Grand Total:', bill.grandTotal.toStringAsFixed(2), bold: true),
+                    _summaryRow(
+                      'Grand Total:',
+                      (bill.grandTotal > 0 
+                        ? bill.grandTotal 
+                        : bill.previousBalance + bill.total
+                      ).toStringAsFixed(2),
+                      bold: true,
+                    ),
                     pw.Divider(),
                     _summaryRow('Amount Paid:', bill.amountPaid.toStringAsFixed(2)),
                     _summaryRow('Final Balance:', bill.newBalance.toStringAsFixed(2), bold: true),

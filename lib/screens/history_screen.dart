@@ -86,30 +86,25 @@ class _HistoryScreenState extends State<HistoryScreen> {
 }
 
   // ← SIMPLIFIED: Just load the bill and switch to billing tab
-  Future<void> _openBillForEditing(Bill bill) async {
-    final billProvider = Provider.of<BillProvider>(context, listen: false);
-    final items = await billProvider.getBillItems(bill.id!);
+Future<void> _openBillForEditing(Bill bill) async {
+  final billProvider = Provider.of<BillProvider>(context, listen: false);
+  final items = await billProvider.getBillItems(bill.id!);
+  if (!mounted) return;
 
-    if (!mounted) return;
+  // This now awaits the DB fetch for latest balance
+  await billProvider.loadBillForEditing(bill, items);
+  billProvider.startEditingExistingBill(bill.id!);
 
-    billProvider.loadBillForEditing(bill, items);
-    billProvider.startEditingExistingBill(bill.id!);
-
-    // ← NEW: Navigate to home screen and switch to billing tab (index 0)
+  // ← NEW: Navigate to home screen and switch to billing tab (index 0)
+  if (mounted) {
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    await Future.delayed(const Duration(milliseconds: 100));
     if (mounted) {
-      // Pop until we reach the home screen
-      Navigator.of(context).popUntil((route) => route.isFirst);
-      
-      // Use a small delay to ensure the navigation completes
-      await Future.delayed(const Duration(milliseconds: 100));
-      
-      // Access the HomeScreen state and switch to billing tab
-      if (mounted) {
-        final homeScreenState = context.findAncestorStateOfType<HomeScreenState>();
-        homeScreenState?.switchToTab(0);
-      }
+      final homeScreenState = context.findAncestorStateOfType<HomeScreenState>();
+      homeScreenState?.switchToTab(0);
     }
   }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -192,7 +187,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
-                                  '₹${bill.total.toStringAsFixed(2)}',
+                                  '₹${(bill.grandTotal > 0 ? bill.grandTotal : bill.previousBalance + bill.total).toStringAsFixed(2)}',
                                   style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,

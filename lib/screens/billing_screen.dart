@@ -34,15 +34,31 @@ class _BillingScreenState extends State<BillingScreen> {
   int? _editingIndex;
   bool _isProcessing = false;
 
-  @override
+@override
 void initState() {
   super.initState();
+
+  // Clear both fields to be empty from the start
+  _packageChargeController.clear();
+  _boxCountController.clear();
+
   WidgetsBinding.instance.addPostFrameCallback((_) {
     final billProvider = Provider.of<BillProvider>(context, listen: false);
-    _packageChargeController.text = billProvider.packageCharge.toStringAsFixed(2);
-    _boxCountController.text = billProvider.boxCount.toString();
-    
-    // ← CHANGED: Get amount paid from the original bill if editing
+
+    // Keep existing values when editing, but show empty if 0
+    if (billProvider.packageCharge > 0) {
+      _packageChargeController.text = billProvider.packageCharge.toStringAsFixed(2);
+    } else {
+      _packageChargeController.clear(); // empty if 0
+    }
+
+    if (billProvider.boxCount > 0) {
+      _boxCountController.text = billProvider.boxCount.toString();
+    } else {
+      _boxCountController.clear(); // empty if 0
+    }
+
+    // Existing amount paid logic (keep it)
     if (billProvider.isEditingExistingBill && billProvider.editingBillId != null) {
       final originalBill = billProvider.bills.firstWhere(
         (b) => b.id == billProvider.editingBillId,
@@ -56,15 +72,18 @@ void initState() {
       _amountPaidController.text = originalBill.amountPaid.toStringAsFixed(2);
     }
   });
-    _packageChargeController.addListener(() {
-      final value = double.tryParse(_packageChargeController.text) ?? 0.0;
-      Provider.of<BillProvider>(context, listen: false).setPackageCharge(value);
-    });
-    _boxCountController.addListener(() {
-      final value = int.tryParse(_boxCountController.text) ?? 0;
-      Provider.of<BillProvider>(context, listen: false).setBoxCount(value);
-    });
-  }
+
+  // Existing listeners
+  _packageChargeController.addListener(() {
+    final value = double.tryParse(_packageChargeController.text) ?? 0.0;
+    Provider.of<BillProvider>(context, listen: false).setPackageCharge(value);
+  });
+
+  _boxCountController.addListener(() {
+    final value = int.tryParse(_boxCountController.text) ?? 0;
+    Provider.of<BillProvider>(context, listen: false).setBoxCount(value);
+  });
+}
 
   @override
   void dispose() {
@@ -272,11 +291,25 @@ void initState() {
         if (billProvider.isEditingExistingBill) {
           return TextButton.icon(
             onPressed: () {
-              billProvider.clearCurrentBill();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Edit cancelled - ready for new bill')),
-              );
-            },
+  final billProvider = Provider.of<BillProvider>(context, listen: false);
+  
+  // 🔴 FULL CLEAR: Remove all traces of the old bill
+  billProvider.clearCurrentBill();
+  
+  // Clear text fields manually (extra safety)
+  _packageChargeController.clear();
+  _boxCountController.clear();
+  _amountPaidController.clear();
+  
+  // Optional: Clear item entry fields too
+  _itemNameController.clear();
+  _quantityController.clear();
+  _priceController.clear();
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('Edit cancelled — ready for new bill')),
+  );
+},
             icon: const Icon(Icons.close, color: Colors.white),
             label: const Text('Cancel Edit', style: TextStyle(color: Colors.white)),
           );
@@ -293,8 +326,6 @@ void initState() {
             flex: 7,
             child: Column(
               children: [
-                const CustomerSelector(),
-                const Divider(height: 1),
                 Expanded(child: _buildPreviewSectionItems()),
                 _buildSummarySection(),
               ],
@@ -306,129 +337,197 @@ void initState() {
   }
 
   Widget _buildItemEntrySection() {
-    return Container(
-      color: AppTheme.backgroundLight,
-      padding: const EdgeInsets.all(24),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              _editingIndex != null ? 'Edit Item' : 'Add Items',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 24),
-            Consumer<ProductProvider>(
-              builder: (context, productProvider, _) {
-                return TypeAheadField<Product>(
-                  controller: _itemNameController,
-                  focusNode: _itemNameFocus,
-                  suggestionsCallback: (pattern) async {
-                    final trimmed = pattern.trim();
-                    if (trimmed.isEmpty) {
-                      return productProvider.products.take(10).toList();
-                    }
-                    return await productProvider.searchProducts(trimmed);
-                  },
-                  itemBuilder: (context, suggestion) => ListTile(
-                    dense: true,
-                    title: Text(suggestion.name),
-                    trailing: Text('₹${suggestion.price.toStringAsFixed(0)}'),
+  return Container(
+    color: AppTheme.backgroundLight,
+    padding: const EdgeInsets.all(24),
+    child: SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 🔴 MOVED HERE: Customer selector now at top of LEFT panel
+          Consumer<BillProvider>(
+            builder: (context, billProvider, _) {
+              final customer = billProvider.currentCustomer;
+              if (customer == null) {
+  return ElevatedButton.icon(
+    onPressed: () {
+      // Open the same customer selection dialog used elsewhere
+      showDialog(
+        context: context,
+        builder: (_) => const CustomerSelectionDialog(),
+      );
+    },
+    icon: const Icon(Icons.person_add),
+    label: const Text('SELECT CUSTOMER'),
+    style: ElevatedButton.styleFrom(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+    ),
+  );
+}
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: customer.balance > 0
+                            ? AppTheme.warningColor
+                            : AppTheme.accentColor,
+                        child: Text(
+                          customer.name[0].toUpperCase(),
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              customer.name,
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                            ),
+                            if (customer.balance > 0)
+                              Text(
+                                'Balance: ₹${customer.balance.toStringAsFixed(2)}',
+                                style: const TextStyle(color: AppTheme.warningColor, fontWeight: FontWeight.w600),
+                              ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => billProvider.setCustomer(null),
+                      ),
+                    ],
                   ),
-                  onSelected: (suggestion) {
-                    _itemNameController.text = suggestion.name;
-                    _priceController.text = suggestion.price.toString();
-                    _quantityFocus.requestFocus();
-                  },
-                  builder: (context, controller, focusNode) => TextField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    decoration: const InputDecoration(
-                      labelText: 'Item Name',
-                      prefixIcon: Icon(Icons.inventory_2_outlined),
+                ),
+              );
+            },
+          ),
+
+          const SizedBox(height: 24),
+
+          // Original "Add Items" title and fields
+          Text(
+            _editingIndex != null ? 'Edit Item' : 'Add Items',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 24),
+
+          // Rest of your existing item entry fields (keep everything below unchanged)
+          Consumer<ProductProvider>(
+            builder: (context, productProvider, _) {
+              return TypeAheadField<Product>(
+                controller: _itemNameController,
+                focusNode: _itemNameFocus,
+                suggestionsCallback: (pattern) async {
+                  final trimmed = pattern.trim();
+                  if (trimmed.isEmpty) {
+                    return productProvider.products.take(10).toList();
+                  }
+                  return await productProvider.searchProducts(trimmed);
+                },
+                itemBuilder: (context, suggestion) => ListTile(
+                  dense: true,
+                  title: Text(suggestion.name),
+                  trailing: Text('₹${suggestion.price.toStringAsFixed(0)}'),
+                ),
+                onSelected: (suggestion) {
+                  _itemNameController.text = suggestion.name;
+                  _priceController.text = suggestion.price.toString();
+                  _quantityFocus.requestFocus();
+                },
+                builder: (context, controller, focusNode) => TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  decoration: const InputDecoration(
+                    labelText: 'Item Name',
+                    prefixIcon: Icon(Icons.inventory_2_outlined),
+                  ),
+                  textCapitalization: TextCapitalization.words,
+                  onSubmitted: (_) => _quantityFocus.requestFocus(),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _quantityController,
+            focusNode: _quantityFocus,
+            decoration: const InputDecoration(
+              labelText: 'Quantity',
+              prefixIcon: Icon(Icons.format_list_numbered),
+            ),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+            onSubmitted: (_) => _priceFocus.requestFocus(),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _priceController,
+            focusNode: _priceFocus,
+            decoration: const InputDecoration(
+              labelText: 'Price (₹)',
+              prefixIcon: Icon(Icons.currency_rupee),
+            ),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+            onSubmitted: (_) => _addOrUpdateItem(),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: _addOrUpdateItem,
+            icon: Icon(_editingIndex != null ? Icons.check : Icons.add),
+            label: Text(_editingIndex != null ? 'UPDATE ITEM' : 'ADD ITEM'),
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              backgroundColor: AppTheme.accentColor,
+            ),
+          ),
+          if (_editingIndex != null)
+            TextButton(
+              onPressed: () => setState(() => _editingIndex = null),
+              child: const Text('Cancel Edit'),
+            ),
+          const SizedBox(height: 16),
+          // Line total card (your existing one)
+          Consumer<BillProvider>(
+            builder: (context, _, __) {
+              final qty = double.tryParse(_quantityController.text) ?? 0;
+              final price = double.tryParse(_priceController.text) ?? 0;
+              final lineTotal = qty * price;
+              if (lineTotal > 0) {
+                return Card(
+                  color: AppTheme.primaryLight.withValues(alpha: 0.1),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Line Total:', style: TextStyle(fontWeight: FontWeight.w500)),
+                        Text(
+                          '₹${lineTotal.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.primaryColor,
+                          ),
+                        ),
+                      ],
                     ),
-                    textCapitalization: TextCapitalization.words,
-                    onSubmitted: (_) => _quantityFocus.requestFocus(),
                   ),
                 );
-              },
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _quantityController,
-              focusNode: _quantityFocus,
-              decoration: const InputDecoration(
-                labelText: 'Quantity',
-                prefixIcon: Icon(Icons.format_list_numbered),
-              ),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
-              onSubmitted: (_) => _priceFocus.requestFocus(),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _priceController,
-              focusNode: _priceFocus,
-              decoration: const InputDecoration(
-                labelText: 'Price (₹)',
-                prefixIcon: Icon(Icons.currency_rupee),
-              ),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
-              onSubmitted: (_) => _addOrUpdateItem(),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _addOrUpdateItem,
-              icon: Icon(_editingIndex != null ? Icons.check : Icons.add),
-              label: Text(_editingIndex != null ? 'UPDATE ITEM' : 'ADD ITEM'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: AppTheme.accentColor,
-              ),
-            ),
-            if (_editingIndex != null)
-              TextButton(
-                onPressed: () => setState(() => _editingIndex = null),
-                child: const Text('Cancel Edit'),
-              ),
-            const SizedBox(height: 16),
-            Consumer<BillProvider>(
-              builder: (context, _, __) {
-                final qty = double.tryParse(_quantityController.text) ?? 0;
-                final price = double.tryParse(_priceController.text) ?? 0;
-                final lineTotal = qty * price;
-                if (lineTotal > 0) {
-                  return Card(
-                    color: AppTheme.primaryLight.withValues(alpha: 0.1),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Line Total:', style: TextStyle(fontWeight: FontWeight.w500)),
-                          Text(
-                            '₹${lineTotal.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.primaryColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-                return const SizedBox.shrink();
-              },
-            ),
-            const SizedBox(height: 32),
-          ],
-        ),
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+          const SizedBox(height: 32),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildSummarySection() {
     return Consumer<BillProvider>(

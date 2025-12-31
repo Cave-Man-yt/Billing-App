@@ -12,7 +12,7 @@ class BillItem {
     required this.productName,
     required this.quantity,
     required this.price,
-  }) : total = quantity * price;
+  }) : total = double.parse((quantity * price).toStringAsFixed(2));
 
   Map<String, dynamic> toMap(int billId) {
     return {
