@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:billing_app/providers/settings_provider.dart';
 import 'package:billing_app/utils/app_theme.dart';
+import 'package:billing_app/services/pdf_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -116,6 +117,105 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
             ),
+            
+            const SizedBox(height: 32),
+            const Divider(),
+            const SizedBox(height: 16),
+            
+            // PDF Print Settings Section
+            Text(
+              'Print Settings',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 16),
+            
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Default PDF Size',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Choose your preferred bill size. You can change this anytime when printing.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    RadioListTile<PdfPageSize>(
+                      value: PdfPageSize.a5,
+                      groupValue: PdfService.preferredSize,
+                      onChanged: (value) {
+                        setState(() {
+                          PdfService.preferredSize = value!;
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Default size set to A5'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                      },
+                      title: const Text('A5 (148mm × 210mm)'),
+                      subtitle: const Text('Recommended for invoices - saves paper'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    
+                    RadioListTile<PdfPageSize>(
+                      value: PdfPageSize.a4,
+                      groupValue: PdfService.preferredSize,
+                      onChanged: (value) {
+                        setState(() {
+                          PdfService.preferredSize = value!;
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Default size set to A4'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                      },
+                      title: const Text('A4 (210mm × 297mm)'),
+                      subtitle: const Text('Standard letter size'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.accentColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.accentColor.withValues(alpha: 0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.lightbulb_outline, color: AppTheme.accentColor, size: 20),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Tip: A5 is perfect for wholesale bills and uses half the paper!',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -130,4 +230,4 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _shopEmailController.dispose();
     super.dispose();
   }
-}
+} 
