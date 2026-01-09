@@ -2,7 +2,6 @@
 import 'package:billing_app/providers/customer_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:sqflite/sqflite.dart';
 import '../models/bill_model.dart';
 import '../models/bill_item_model.dart';
 import '../models/customer_model.dart';
@@ -106,13 +105,26 @@ class BillProvider with ChangeNotifier {
     _packageCharge = bill.packageCharge;
     _boxCount = bill.boxCount;
 
-    // 🔴 FIX: Show HISTORICAL balance in UI (what it was when bill was created)
-    // This makes the preview look correct
+    // 🔴 FIX: Get CURRENT customer balance from DB, not historical balance
+    // This ensures reprinted bills show the correct current balance
+    final db = await DatabaseService.instance.database;
+    final customerData = await db.query(
+      'customers',
+      where: 'id = ?',
+      whereArgs: [bill.customerId],
+      limit: 1,
+    );
+    
+    double currentBalance = bill.previousBalance; // fallback to historical
+    if (customerData.isNotEmpty) {
+      currentBalance = (customerData.first['balance'] as num?)?.toDouble() ?? 0.0;
+    }
+
     _currentCustomer = Customer(
       id: bill.customerId,
       name: bill.customerName,
       city: bill.customerCity,
-      balance: bill.previousBalance, // Use the historical balance from the bill
+      balance: currentBalance, // Use CURRENT balance, not historical
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
@@ -142,7 +154,7 @@ class BillProvider with ChangeNotifier {
     try {
       final db = await DatabaseService.instance.database;
       
-      // 🔴 CRITICAL FIX: Always get the CURRENT customer balance from DB
+      // CRITICAL: Always get the CURRENT customer balance from DB
       final customerData = await db.query(
         'customers',
         where: 'id = ?',
@@ -158,12 +170,10 @@ class BillProvider with ChangeNotifier {
       double previousBalance = currentCustomerBalance;
 
       if (_isEditingExistingBill && _editingBillId != null) {
-        // 🔴 FIX: When editing, we need to "undo" the effect of the old bill first
+        // When editing, we need to "undo" the effect of the old bill first
         final originalBill = _bills.firstWhere((b) => b.id == _editingBillId);
 
         // Calculate what the balance was BEFORE the original bill was created
-        // Original bill added: (originalBill.newBalance - originalBill.previousBalance) to customer
-        // So to undo it: currentBalance - (newBalance - previousBalance) of original
         final originalBillEffect = originalBill.newBalance - originalBill.previousBalance;
         previousBalance = roundMoney(currentCustomerBalance - originalBillEffect);
 
@@ -172,7 +182,7 @@ class BillProvider with ChangeNotifier {
         debugPrint('   Original bill effect: $originalBillEffect (${originalBill.previousBalance} → ${originalBill.newBalance})');
         debugPrint('   Restored previous balance: $previousBalance');
       } else {
-        // 🔴 FIX: For new bills, previous balance is simply the current customer balance
+        // For new bills, previous balance is simply the current customer balance
         previousBalance = currentCustomerBalance;
         debugPrint('💚 New bill - using current customer balance as previous: $previousBalance');
       }
@@ -210,14 +220,43 @@ class BillProvider with ChangeNotifier {
       final itemsToSave = List<BillItem>.from(_currentBillItems);
 
       if (_isEditingExistingBill && bill.id != null) {
-        await DatabaseService.instance.updateBill(bill, itemsToSave);
-        debugPrint('✅ Updated existing bill');
+        // 🔴 UPDATE EXISTING BILL
+        // Check if anything actually changed before updating
+        final originalBill = _bills.firstWhere((b) => b.id == _editingBillId);
+        final hasChanges = 
+            bill.total != originalBill.total ||
+            bill.amountPaid != originalBill.amountPaid ||
+            bill.packageCharge != originalBill.packageCharge ||
+            bill.boxCount != originalBill.boxCount ||
+            bill.newBalance != originalBill.newBalance;
+        
+        if (hasChanges) {
+          // The database service will automatically:
+          // 1. Calculate the delta (new balance - old balance)
+          // 2. Add an adjustment transaction if there's a change
+          // 3. Update the bill record
+          await DatabaseService.instance.updateBill(bill, itemsToSave);
+          debugPrint('✅ Updated existing bill with transaction adjustment');
+        } else {
+          debugPrint('ℹ️ No changes detected - skipping database update');
+          // Still need to reload to refresh UI
+          await loadBills();
+          if (clearAfterSave) {
+            clearCurrentBill();
+          }
+          clearEditingMode();
+          return bill;
+        }
       } else {
+        // 🔴 CREATE NEW BILL
+        // The database service will automatically:
+        // 1. Insert the bill
+        // 2. Add a balance transaction for this bill
         await DatabaseService.instance.createBill(bill, itemsToSave);
-        debugPrint('✅ Created new bill');
+        debugPrint('✅ Created new bill with transaction record');
       }
 
-      // 🔴 CRITICAL FIX: Update customer balance to the new balance
+      // Update customer balance to the new balance
       if (_currentCustomer!.id != null) {
         await DatabaseService.instance.updateCustomerBalance(_currentCustomer!.id!, newBalance);
         debugPrint('💾 Updated customer balance in DB to: $newBalance');

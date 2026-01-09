@@ -49,6 +49,48 @@ class CustomerProvider with ChangeNotifier {
     }
   }
 
+  /// Add a payment (reduces customer balance)
+  Future<void> addPayment(int customerId, double amount, String description) async {
+    try {
+      await DatabaseService.instance.addPaymentTransaction(
+        customerId,
+        amount,
+        description,
+      );
+      await loadCustomers();
+      debugPrint('✅ Payment added: ₹${amount.toStringAsFixed(2)} for customer $customerId');
+    } catch (e) {
+      debugPrint('❌ Error adding payment: $e');
+      rethrow;
+    }
+  }
+
+  /// Add a manual adjustment to customer balance
+  Future<void> addAdjustment(int customerId, double amount, String description) async {
+    try {
+      await DatabaseService.instance.addAdjustmentTransaction(
+        customerId,
+        amount,
+        description,
+      );
+      await loadCustomers();
+      debugPrint('✅ Adjustment added: ₹${amount.toStringAsFixed(2)} for customer $customerId');
+    } catch (e) {
+      debugPrint('❌ Error adding adjustment: $e');
+      rethrow;
+    }
+  }
+
+  /// Get balance transaction history for a customer
+  Future<List<BalanceTransaction>> getBalanceHistory(int customerId) async {
+    try {
+      return await DatabaseService.instance.getBalanceHistory(customerId);
+    } catch (e) {
+      debugPrint('Error loading balance history: $e');
+      return [];
+    }
+  }
+
   void selectCustomer(Customer? customer) {
     _selectedCustomer = customer;
     notifyListeners();
