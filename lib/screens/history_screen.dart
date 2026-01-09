@@ -7,7 +7,7 @@ import '../models/bill_model.dart';
 import '../utils/app_theme.dart';
 import '../services/pdf_service.dart';
 import '../services/database_service.dart';
-import 'home_screen.dart';  // ← CHANGE: Import home_screen instead of billing_screen
+import 'home_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -44,67 +44,87 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _deleteBill(int billId) async {
-  final confirm = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Delete Bill'),
-      content: const Text('Are you sure you want to delete this bill? This cannot be undone.'),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-        ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
-      ],
-    ),
-  );
-
-  if (confirm != true) return;  // ← Early return if cancelled
-  
-  if (!mounted) return;  // ← Check mounted before proceeding
-  
-  final billProvider = Provider.of<BillProvider>(context, listen: false);
-  
-  // Check if the deleted bill is currently loaded in billing screen
-  final isCurrentlyEditing = billProvider.isEditingExistingBill && 
-                              billProvider.editingBillId == billId;
-  
-  await DatabaseService.instance.deleteBill(billId);
-  
-  if (!mounted) return;  // ← Check mounted after async operation
-  
-  await billProvider.loadBills();
-  _loadBills();
-  
-  // If the deleted bill was being edited, clear the billing screen
-  if (isCurrentlyEditing) {
-    billProvider.clearCurrentBill();
-  }
-  
-  if (mounted) {  // ← Check mounted before showing snackbar
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Bill deleted successfully')),
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Bill'),
+        content: const Text('Are you sure you want to delete this bill? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+        ],
+      ),
     );
-  }
-}
 
-  // ← SIMPLIFIED: Just load the bill and switch to billing tab
-Future<void> _openBillForEditing(Bill bill) async {
-  final billProvider = Provider.of<BillProvider>(context, listen: false);
-  final items = await billProvider.getBillItems(bill.id!);
-  if (!mounted) return;
+    if (confirm != true) return;
+    if (!mounted) return;
 
-  // This now awaits the DB fetch for latest balance
-  await billProvider.loadBillForEditing(bill, items);
-  billProvider.startEditingExistingBill(bill.id!);
+    final billProvider = Provider.of<BillProvider>(context, listen: false);
 
-  // ← NEW: Navigate to home screen and switch to billing tab (index 0)
-  if (mounted) {
-    Navigator.of(context).popUntil((route) => route.isFirst);
-    await Future.delayed(const Duration(milliseconds: 100));
+    // Check if the deleted bill is currently loaded in billing screen
+    final isCurrentlyEditing = billProvider.isEditingExistingBill && 
+                                billProvider.editingBillId == billId;
+
+    await DatabaseService.instance.deleteBill(billId);
+
+    if (!mounted) return;
+
+    await billProvider.loadBills();
+    _loadBills();
+
+    // If the deleted bill was being edited, clear the billing screen
+    if (isCurrentlyEditing) {
+      billProvider.clearCurrentBill();
+    }
+
     if (mounted) {
-      final homeScreenState = context.findAncestorStateOfType<HomeScreenState>();
-      homeScreenState?.switchToTab(0);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bill deleted successfully')),
+      );
     }
   }
-}
+
+  // Load bill for editing and navigate to billing screen
+  Future<void> _openBillForEditing(Bill bill) async {
+    final billProvider = Provider.of<BillProvider>(context, listen: false);
+    final items = await billProvider.getBillItems(bill.id!);
+    if (!mounted) return;
+
+    // This now fetches the current customer balance from DB
+    await billProvider.loadBillForEditing(bill, items);
+    billProvider.startEditingExistingBill(bill.id!);
+
+    // Navigate to home screen and switch to billing tab (index 0)
+    if (mounted) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (mounted) {
+        final homeScreenState = context.findAncestorStateOfType<HomeScreenState>();
+        homeScreenState?.switchToTab(0);
+      }
+    }
+  }
+
+  // 🔴 FIX: Print/share should NOT load the bill for editing
+  Future<void> _printBill(Bill bill) async {
+    final billProvider = Provider.of<BillProvider>(context, listen: false);
+    final items = await billProvider.getBillItems(bill.id!);
+    if (!mounted) return;
+
+    // 🔴 CRITICAL: Do NOT call loadBillForEditing here!
+    // Just generate and print the PDF directly
+    await PdfService.generateAndPrintBill(context, bill, items);
+  }
+
+  Future<void> _shareBill(Bill bill) async {
+    final billProvider = Provider.of<BillProvider>(context, listen: false);
+    final items = await billProvider.getBillItems(bill.id!);
+    if (!mounted) return;
+
+    // 🔴 CRITICAL: Do NOT call loadBillForEditing here!
+    // Just share the PDF directly
+    await PdfService.shareBill(context, bill, items, filename: '${bill.billNumber}.pdf');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -209,22 +229,12 @@ Future<void> _openBillForEditing(Bill bill) async {
                             IconButton(
                               icon: const Icon(Icons.share_outlined),
                               tooltip: 'Share PDF',
-                              onPressed: () async {
-                                final items = await billProvider.getBillItems(bill.id!);
-                                if (context.mounted) {
-                                  await PdfService.shareBill(context, bill, items, filename: '${bill.billNumber}.pdf');
-                                }
-                              },
+                              onPressed: () => _shareBill(bill), // 🔴 FIX: Use dedicated method
                             ),
                             IconButton(
                               icon: const Icon(Icons.print),
                               tooltip: 'Print',
-                              onPressed: () async {
-                                final items = await billProvider.getBillItems(bill.id!);
-                                if (context.mounted) {
-                                  await PdfService.generateAndPrintBill(context, bill, items);
-                                }
-                              },
+                              onPressed: () => _printBill(bill), // 🔴 FIX: Use dedicated method
                             ),
                           ],
                         ),
