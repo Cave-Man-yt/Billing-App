@@ -72,9 +72,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
       [customer.id],
     );
     final count = Sqflite.firstIntValue(billCountResult) ?? 0;
+    
+    if (!outerContext.mounted) return;
 
     if (count > 0) {
-      if (!outerContext.mounted) return;
       ScaffoldMessenger.of(outerContext).showSnackBar(
         const SnackBar(content: Text('Cannot delete customer with existing bills')),
       );
@@ -100,6 +101,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
     try {
       await DatabaseService.instance.deleteCustomer(customer.id!);
+      
+      if (!outerContext.mounted) return;
 
       // Refresh list
       final customerProvider = Provider.of<CustomerProvider>(outerContext, listen: false);

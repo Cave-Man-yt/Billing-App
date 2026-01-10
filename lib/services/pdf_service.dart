@@ -19,10 +19,8 @@ class PdfService {
   static pw.Font get bold => pw.Font.helveticaBold();
 
   // Store user's preference (defaults to A5 for wholesale)
-  static PdfPageSize _preferredSize = PdfPageSize.a5;
-  
-  static PdfPageSize get preferredSize => _preferredSize;
-  static set preferredSize(PdfPageSize size) => _preferredSize = size;
+  // Store user's preference (defaults to A5 for wholesale)
+  static PdfPageSize preferredSize = PdfPageSize.a5;
 
   static PdfPageFormat _getPageFormat(PdfPageSize size) {
     switch (size) {
@@ -49,30 +47,32 @@ class PdfService {
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
         title: const Text('Select Print Size'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Radio<PdfPageSize>(
-                value: PdfPageSize.a5,
-                groupValue: _preferredSize,
-                onChanged: (_) {},
+        content: RadioGroup<PdfPageSize>(
+          groupValue: preferredSize,
+          onChanged: (val) {
+             if (val != null) Navigator.pop(dialogContext, val);
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Radio<PdfPageSize>(
+                  value: PdfPageSize.a5,
+                ),
+                title: const Text('A5 (148mm × 210mm)'),
+                subtitle: const Text('Recommended for invoices'),
+                onTap: () => Navigator.pop(dialogContext, PdfPageSize.a5),
               ),
-              title: const Text('A5 (148mm × 210mm)'),
-              subtitle: const Text('Recommended for invoices'),
-              onTap: () => Navigator.pop(dialogContext, PdfPageSize.a5),
-            ),
-            ListTile(
-              leading: Radio<PdfPageSize>(
-                value: PdfPageSize.a4,
-                groupValue: _preferredSize,
-                onChanged: (_) {},
+              ListTile(
+                leading: const Radio<PdfPageSize>(
+                  value: PdfPageSize.a4,
+                ),
+                title: const Text('A4 (210mm × 297mm)'),
+                subtitle: const Text('Standard letter size'),
+                onTap: () => Navigator.pop(dialogContext, PdfPageSize.a4),
               ),
-              title: const Text('A4 (210mm × 297mm)'),
-              subtitle: const Text('Standard letter size'),
-              onTap: () => Navigator.pop(dialogContext, PdfPageSize.a4),
-            ),
-          ],
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -86,7 +86,7 @@ class PdfService {
     if (selectedSize == null || !context.mounted) return;
 
     // Remember user's choice
-    _preferredSize = selectedSize;
+    preferredSize = selectedSize;
 
     try {
       final bytes = await _buildPdfBytes(context, bill, items, selectedSize);
@@ -125,30 +125,32 @@ class PdfService {
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
         title: const Text('Select PDF Size'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Radio<PdfPageSize>(
-                value: PdfPageSize.a5,
-                groupValue: _preferredSize,
-                onChanged: (_) {},
+        content: RadioGroup<PdfPageSize>(
+          groupValue: preferredSize,
+          onChanged: (val) {
+             if (val != null) Navigator.pop(dialogContext, val);
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Radio<PdfPageSize>(
+                  value: PdfPageSize.a5,
+                ),
+                title: const Text('A5 (148mm × 210mm)'),
+                subtitle: const Text('Recommended for invoices'),
+                onTap: () => Navigator.pop(dialogContext, PdfPageSize.a5),
               ),
-              title: const Text('A5 (148mm × 210mm)'),
-              subtitle: const Text('Recommended for invoices'),
-              onTap: () => Navigator.pop(dialogContext, PdfPageSize.a5),
-            ),
-            ListTile(
-              leading: Radio<PdfPageSize>(
-                value: PdfPageSize.a4,
-                groupValue: _preferredSize,
-                onChanged: (_) {},
+              ListTile(
+                leading: const Radio<PdfPageSize>(
+                  value: PdfPageSize.a4,
+                ),
+                title: const Text('A4 (210mm × 297mm)'),
+                subtitle: const Text('Standard letter size'),
+                onTap: () => Navigator.pop(dialogContext, PdfPageSize.a4),
               ),
-              title: const Text('A4 (210mm × 297mm)'),
-              subtitle: const Text('Standard letter size'),
-              onTap: () => Navigator.pop(dialogContext, PdfPageSize.a4),
-            ),
-          ],
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -162,7 +164,7 @@ class PdfService {
     if (selectedSize == null || !context.mounted) return;
 
     // Remember user's choice
-    _preferredSize = selectedSize;
+    preferredSize = selectedSize;
 
     final bytes = await _buildPdfBytes(context, bill, items, selectedSize);
     final finalFilename = filename ?? '${bill.billNumber}_${selectedSize.name.toUpperCase()}.pdf';

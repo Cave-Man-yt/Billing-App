@@ -2,7 +2,7 @@
 import 'package:billing_app/providers/customer_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:sqflite/sqflite.dart';
+
 import '../models/bill_model.dart';
 import '../models/bill_item_model.dart';
 import '../models/customer_model.dart';
