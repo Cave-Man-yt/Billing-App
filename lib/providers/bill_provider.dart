@@ -1,10 +1,11 @@
+// lib/providers/bill_provider.dart
 import 'package:billing_app/providers/customer_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:sqflite/sqflite.dart';
 import '../models/bill_model.dart';
 import '../models/bill_item_model.dart';
 import '../models/customer_model.dart';
-import '../models/balance_transaction_model.dart';
 import '../services/database_service.dart';
 
 class BillProvider with ChangeNotifier {
@@ -208,61 +209,18 @@ class BillProvider with ChangeNotifier {
 
       final itemsToSave = List<BillItem>.from(_currentBillItems);
 
-      final bool isEdit = _isEditingExistingBill && bill.id != null;
-      int savedBillId;
-
-      if (isEdit) {
+      if (_isEditingExistingBill && bill.id != null) {
         await DatabaseService.instance.updateBill(bill, itemsToSave);
-        savedBillId = bill.id!;
         debugPrint('✅ Updated existing bill');
       } else {
-        savedBillId = await DatabaseService.instance.createBill(bill, itemsToSave);
+        await DatabaseService.instance.createBill(bill, itemsToSave);
         debugPrint('✅ Created new bill');
       }
 
-      // 🔴 REPLACED: Use Transaction History instead of direct update
-      // await DatabaseService.instance.updateCustomerBalance(_currentCustomer!.id!, newBalance);
-      
-      if (!isEdit) {
-        // NEW BILL: Log explicitly as BILL and PAYMENT
-        // 1. Log Bill Charge
-        if (total != 0) {
-          await DatabaseService.instance.addTransaction(BalanceTransaction(
-            customerId: _currentCustomer!.id!,
-            amount: total,
-            type: 'BILL',
-            description: 'Bill #${bill.billNumber}',
-            billId: savedBillId,
-          ));
-        }
-        
-        // 2. Log Payment (if any)
-        if (amountPaid > 0) {
-          await DatabaseService.instance.addTransaction(BalanceTransaction(
-            customerId: _currentCustomer!.id!,
-            amount: -amountPaid,
-            type: 'PAYMENT',
-            description: 'Payment for #${bill.billNumber}',
-            billId: savedBillId,
-          ));
-        }
-        debugPrint('📜 Logged BILL and PAYMENT transactions');
-      } else {
-        // EDIT BILL: Log net adjustment
-        // We calculate the required change to reach newBalance from currentCustomerBalance
-        // adjustment = newBalance - currentCustomerBalance
-        final adjustmentAmount = roundMoney(newBalance - currentCustomerBalance);
-        
-        if (adjustmentAmount.abs() > 0.001) {
-           await DatabaseService.instance.addTransaction(BalanceTransaction(
-            customerId: _currentCustomer!.id!,
-            amount: adjustmentAmount,
-            type: 'ADJUSTMENT',
-            description: 'Correction for Bill #${bill.billNumber}',
-            billId: savedBillId,
-          ));
-          debugPrint('📜 Logged ADJUSTMENT transaction: $adjustmentAmount');
-        }
+      // 🔴 CRITICAL FIX: Update customer balance to the new balance
+      if (_currentCustomer!.id != null) {
+        await DatabaseService.instance.updateCustomerBalance(_currentCustomer!.id!, newBalance);
+        debugPrint('💾 Updated customer balance in DB to: $newBalance');
       }
 
       if (customerProvider != null) {

@@ -6,10 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite/sqflite.dart';
 import '../models/customer_model.dart';
-import '../models/balance_transaction_model.dart';
 import '../providers/customer_provider.dart';
 import '../utils/app_theme.dart';
-import 'package:intl/intl.dart';
 
 class CustomersScreen extends StatefulWidget {
   const CustomersScreen({super.key});
@@ -65,20 +63,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
     ).then((_) => _loadCustomers());
   }
 
-  void _showPaymentDialog(BuildContext context, Customer customer) {
-    showDialog(
-      context: context,
-      builder: (_) => PaymentDialog(customer: customer),
-    ).then((_) => _loadCustomers());
-  }
-
-  void _showHistoryDialog(BuildContext context, Customer customer) {
-    showDialog(
-      context: context,
-      builder: (_) => HistoryDialog(customer: customer),
-    );
-  }
-
   // 🔴 FINAL FIX: No more async gap warnings
   Future<void> _deleteCustomer(BuildContext outerContext, Customer customer) async {
     // Check if customer has any bills
@@ -98,7 +82,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
     }
 
     // Show confirmation dialog and get result BEFORE any await
-    if (!outerContext.mounted) return;
     final bool shouldDelete = await showDialog<bool>(
           context: outerContext,
           builder: (dialogContext) => AlertDialog(
@@ -118,7 +101,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
     try {
       await DatabaseService.instance.deleteCustomer(customer.id!);
 
-      if (!outerContext.mounted) return;
       // Refresh list
       final customerProvider = Provider.of<CustomerProvider>(outerContext, listen: false);
       await customerProvider.loadCustomers();
@@ -199,70 +181,32 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     final customer = _filteredCustomers[index];
                     final hasBalance = customer.balance > 0;
                     return Card(
-                      child: Column(
-                        children: [
-                          ListTile(
-                            onTap: () => _showHistoryDialog(context, customer),
-                            onLongPress: () => _deleteCustomer(context, customer),
-                            leading: CircleAvatar(
-                              backgroundColor: hasBalance ? AppTheme.warningColor : AppTheme.accentColor,
-                              child: Text(
-                                customer.name[0].toUpperCase(),
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      child: ListTile(
+                        onTap: () => _showEditBalanceDialog(context, customer),
+                        onLongPress: () => _deleteCustomer(context, customer),
+                        leading: CircleAvatar(
+                          backgroundColor: hasBalance ? AppTheme.warningColor : AppTheme.accentColor,
+                          child: Text(
+                            customer.name[0].toUpperCase(),
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        title: Text(customer.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (customer.city != null) Text(customer.city!),
+                            if (hasBalance)
+                              Text(
+                                'Balance: ₹${customer.balance.toStringAsFixed(2)}',
+                                style: const TextStyle(color: AppTheme.warningColor, fontWeight: FontWeight.w600),
                               ),
-                            ),
-                            title: Text(customer.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (customer.city != null) Text(customer.city!),
-                                if (hasBalance)
-                                  Text(
-                                    'Balance: ₹${customer.balance.toStringAsFixed(2)}',
-                                    style: const TextStyle(color: AppTheme.warningColor, fontWeight: FontWeight.w600),
-                                  ),
-                              ],
-                            ),
-                            trailing: hasBalance
-                                ? const Icon(Icons.account_balance_wallet, color: AppTheme.warningColor)
-                                : null,
-                          ),
-                          const Divider(height: 1),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceAround,
-                              children: [
-                                TextButton.icon(
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: AppTheme.textSecondary,
-                                  ),
-                                  icon: const Icon(Icons.history, size: 18),
-                                  label: const Text('History'),
-                                  onPressed: () => _showHistoryDialog(context, customer),
-                                ),
-                                TextButton.icon(
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: AppTheme.textSecondary,
-                                  ),
-                                  icon: const Icon(Icons.edit, size: 18),
-                                  label: const Text('Adjust'),
-                                  onPressed: () => _showEditBalanceDialog(context, customer),
-                                ),
-                                FilledButton.icon(
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: AppTheme.successColor,
-                                    foregroundColor: Colors.white,
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                  icon: const Icon(Icons.payment, size: 16),
-                                  label: const Text('Payment'),
-                                  onPressed: () => _showPaymentDialog(context, customer),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
+                        isThreeLine: hasBalance,
+                        trailing: hasBalance
+                            ? const Icon(Icons.account_balance_wallet, color: AppTheme.warningColor)
+                            : null,
                       ),
                     );
                   },
@@ -389,53 +333,34 @@ class _EditBalanceDialogState extends State<EditBalanceDialog> {
   late final _balanceController = TextEditingController(
     text: widget.customer.balance.toStringAsFixed(2),
   );
-  final _reasonController = TextEditingController();
 
   Future<void> _updateBalance() async {
     final newBalance = double.tryParse(_balanceController.text) ?? 0.0;
-    
-    // Calculate adjustment needed
-    // current + adjustment = new
-    // adjustment = new - current
-    final currentBalance = widget.customer.balance;
-    final adjustment = newBalance - currentBalance;
-
-    if (adjustment.abs() < 0.01) {
-       Navigator.pop(context);
-       return;
-    }
-
-    final String reason = _reasonController.text.isEmpty 
-        ? 'Manual Adjustment' 
-        : 'Adj: ${_reasonController.text}';
+    final updatedCustomer = widget.customer.copyWith(
+      balance: newBalance,
+      updatedAt: DateTime.now(),
+    );
 
     final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
 
-    try {
-      await customerProvider.addAdjustment(widget.customer.id!, adjustment, reason);
-      
-      if (!mounted) return;
-      navigator.pop();
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Balance adjusted successfully'),
-          backgroundColor: AppTheme.successColor,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      messenger.showSnackBar(
-         SnackBar(content: Text('Error: $e')),
-      );
-    }
+    await customerProvider.updateCustomer(updatedCustomer);
+    if (!mounted) return;
+
+    navigator.pop();
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Balance updated successfully'),
+        backgroundColor: AppTheme.successColor,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Adjust Balance - ${widget.customer.name}'),
+      title: Text('Edit Balance - ${widget.customer.name}'),
       content: SizedBox(
         width: 300,
         child: Column(
@@ -445,15 +370,10 @@ class _EditBalanceDialogState extends State<EditBalanceDialog> {
             const SizedBox(height: 24),
             TextField(
               controller: _balanceController,
-              decoration: const InputDecoration(labelText: 'New Balance (₹)', prefixIcon: Icon(Icons.account_balance_wallet)),
+              decoration: const InputDecoration(labelText: 'Balance (₹)', prefixIcon: Icon(Icons.account_balance_wallet)),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
               autofocus: true,
-            ),
-             const SizedBox(height: 16),
-            TextField(
-              controller: _reasonController,
-              decoration: const InputDecoration(labelText: 'Reason (Optional)', prefixIcon: Icon(Icons.comment)),
             ),
             const SizedBox(height: 16),
             Container(
@@ -468,7 +388,7 @@ class _EditBalanceDialogState extends State<EditBalanceDialog> {
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'This helps correct data errors. For payments, please use the Payment button.',
+                      'This will set the customer\'s current outstanding balance',
                       style: TextStyle(fontSize: 12),
                     ),
                   ),
@@ -488,202 +408,6 @@ class _EditBalanceDialogState extends State<EditBalanceDialog> {
   @override
   void dispose() {
     _balanceController.dispose();
-    _reasonController.dispose();
     super.dispose();
-  }
-}
-
-class PaymentDialog extends StatefulWidget {
-  final Customer customer;
-  const PaymentDialog({super.key, required this.customer});
-
-  @override
-  State<PaymentDialog> createState() => _PaymentDialogState();
-}
-
-class _PaymentDialogState extends State<PaymentDialog> {
-  final _amountController = TextEditingController();
-  final _noteController = TextEditingController();
-  bool _isLoading = false;
-
-  Future<void> _submitPayment() async {
-    final amount = double.tryParse(_amountController.text);
-    if (amount == null || amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid amount')),
-      );
-      return;
-    }
-
-    setState(() => _isLoading = true);
-    
-    try {
-      final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
-      final note = _noteController.text.trim();
-      final description = note.isEmpty ? 'Payment Received' : 'Payment: $note';
-      
-      await customerProvider.addPayment(widget.customer.id!, amount, description);
-      
-      if (!mounted) return;
-      Navigator.pop(context);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Payment recorded successfully'),
-          backgroundColor: AppTheme.successColor,
-        ),
-      );
-    } catch (e) {
-      if (mounted) {
-         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error recording payment: $e')),
-         );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Receive Payment'),
-      content: SizedBox(
-         width: 300,
-         child: Column(
-           mainAxisSize: MainAxisSize.min,
-           crossAxisAlignment: CrossAxisAlignment.start,
-           children: [
-             Text('Customer: ${widget.customer.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
-             Text('Current Balance: ₹${widget.customer.balance.toStringAsFixed(2)}'),
-             const SizedBox(height: 24),
-             TextField(
-               controller: _amountController,
-               decoration: const InputDecoration(
-                 labelText: 'Amount Received (₹)', 
-                 prefixIcon: Icon(Icons.attach_money),
-                 border: OutlineInputBorder(),
-               ),
-               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-               inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
-               autofocus: true,
-             ),
-             const SizedBox(height: 16),
-             TextField(
-               controller: _noteController,
-               decoration: const InputDecoration(
-                 labelText: 'Note (Optional)', 
-                 prefixIcon: Icon(Icons.note),
-                 border: OutlineInputBorder(),
-               ),
-             ),
-           ],
-         ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        ElevatedButton(
-          onPressed: _isLoading ? null : _submitPayment, 
-          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.successColor, foregroundColor: Colors.white),
-          child: _isLoading 
-             ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-             : const Text('Receive Payment'),
-        ),
-      ],
-    );
-  }
-  
-  @override
-  void dispose() {
-    _amountController.dispose();
-    _noteController.dispose();
-    super.dispose();
-  }
-}
-
-class HistoryDialog extends StatefulWidget {
-  final Customer customer;
-  const HistoryDialog({super.key, required this.customer});
-
-  @override
-  State<HistoryDialog> createState() => _HistoryDialogState();
-}
-
-class _HistoryDialogState extends State<HistoryDialog> {
-  List<BalanceTransaction> _transactions = [];
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadHistory();
-  }
-
-  Future<void> _loadHistory() async {
-    final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
-    final history = await customerProvider.getHistory(widget.customer.id!);
-    if (mounted) {
-      setState(() {
-        _transactions = history;
-        _isLoading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(child: Text('History - ${widget.customer.name}', overflow: TextOverflow.ellipsis)),
-          IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
-        ],
-      ),
-      content: SizedBox(
-        width: 500,
-        height: 600,
-        child: _isLoading 
-          ? const Center(child: CircularProgressIndicator())
-          : _transactions.isEmpty 
-             ? const Center(child: Text('No transactions found'))
-             : ListView.builder(
-                 itemCount: _transactions.length,
-                 itemBuilder: (context, index) {
-                   final txn = _transactions[index];
-                   final isPayment = txn.amount < 0;
-                   
-                   return ListTile(
-                     leading: CircleAvatar(
-                       backgroundColor: isPayment 
-                          ? AppTheme.successColor.withValues(alpha: 0.2) 
-                          : AppTheme.errorColor.withValues(alpha: 0.2),
-                       child: Icon(
-                         isPayment ? Icons.arrow_downward : Icons.arrow_upward,
-                         color: isPayment ? AppTheme.successColor : AppTheme.errorColor,
-                         size: 20,
-                       ),
-                     ),
-                     title: Text(
-                       txn.description ?? txn.type, 
-                       style: const TextStyle(fontWeight: FontWeight.w600),
-                     ),
-                     subtitle: Text(
-                       DateFormat('MMM d, y • h:mm a').format(txn.createdAt),
-                       style: const TextStyle(fontSize: 12),
-                     ),
-                     trailing: Text(
-                       '${isPayment ? '-' : '+'}₹${txn.amount.abs().toStringAsFixed(2)}',
-                       style: TextStyle(
-                         color: isPayment ? AppTheme.successColor : AppTheme.errorColor,
-                         fontWeight: FontWeight.bold,
-                         fontSize: 16,
-                       ),
-                     ),
-                   );
-                 },
-               ),
-      ),
-    );
   }
 }
