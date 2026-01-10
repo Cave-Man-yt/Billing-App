@@ -152,9 +152,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     const SizedBox(height: 16),
                     
+                    // ignore: deprecated_member_use
                     RadioListTile<PdfPageSize>(
                       value: PdfPageSize.a5,
+                      // ignore: deprecated_member_use
                       groupValue: PdfService.preferredSize,
+                      // ignore: deprecated_member_use
                       onChanged: (value) {
                         setState(() {
                           PdfService.preferredSize = value!;
@@ -171,9 +174,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       contentPadding: EdgeInsets.zero,
                     ),
                     
+                    // ignore: deprecated_member_use
                     RadioListTile<PdfPageSize>(
                       value: PdfPageSize.a4,
+                      // ignore: deprecated_member_use
                       groupValue: PdfService.preferredSize,
+                      // ignore: deprecated_member_use
                       onChanged: (value) {
                         setState(() {
                           PdfService.preferredSize = value!;

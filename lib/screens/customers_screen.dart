@@ -94,6 +94,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
       return;
     }
 
+    if (!outerContext.mounted) return;
+
     final bool shouldDelete = await showDialog<bool>(
           context: outerContext,
           builder: (dialogContext) => AlertDialog(
@@ -113,8 +115,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
     try {
       await DatabaseService.instance.deleteCustomer(customer.id!);
 
+      if (!outerContext.mounted) return;
       final customerProvider = Provider.of<CustomerProvider>(outerContext, listen: false);
       await customerProvider.loadCustomers();
+      if (!outerContext.mounted) return;
       _loadCustomers();
 
       if (outerContext.mounted) {
@@ -124,9 +128,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
       }
     } catch (e) {
       if (outerContext.mounted) {
-        ScaffoldMessenger.of(outerContext).showSnackBar(
-          const SnackBar(content: Text('Error deleting customer')),
-        );
+         ScaffoldMessenger.of(outerContext).showSnackBar(
+           const SnackBar(content: Text('Error deleting customer')),
+         );
       }
     }
   }
@@ -472,6 +476,7 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
           ],
         ),
       );
+      if (!mounted) return;
       if (shouldContinue != true) return;
     }
 
@@ -505,6 +510,7 @@ class _AddPaymentDialogState extends State<AddPaymentDialog> {
       );
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -589,26 +595,21 @@ class BalanceHistoryDialog extends StatefulWidget {
 }
 
 class _BalanceHistoryDialogState extends State<BalanceHistoryDialog> {
-  List<BalanceTransaction>? _transactions;
-  bool _isLoading = true;
+  // _transactions and _isLoading removed as we use FutureBuilder/Consumer
+
 
   @override
   void initState() {
     super.initState();
-    _loadHistory();
+    // Initial load is handled by Consumer/FutureBuilder or we trigger it once
+    // trigger load
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<CustomerProvider>(context, listen: false).getBalanceHistory(widget.customer.id!);
+    });
   }
 
-  Future<void> _loadHistory() async {
-    final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
-    final transactions = await customerProvider.getBalanceHistory(widget.customer.id!);
-    
-    if (mounted) {
-      setState(() {
-        _transactions = transactions;
-        _isLoading = false;
-      });
-    }
-  }
+  // _loadHistory removed, using Provider directly
+
 
   Color _getAmountColor(double amount) {
     if (amount < 0) return AppTheme.successColor; // Payment (reduces balance)
@@ -695,75 +696,95 @@ class _BalanceHistoryDialogState extends State<BalanceHistoryDialog> {
             const Divider(),
             const SizedBox(height: 8),
             Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _transactions == null || _transactions!.isEmpty
-                      ? const Center(
-                          child: Column(
+              child: FutureBuilder<List<BalanceTransaction>>(
+                future: Provider.of<CustomerProvider>(context).getBalanceHistory(widget.customer.id!),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  
+                  final transactions = snapshot.data ?? [];
+                  
+                  if (transactions.isEmpty) {
+                    return const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.history, size: 64, color: AppTheme.textHint),
+                          SizedBox(height: 16),
+                          Text(
+                            'No transaction history',
+                            style: TextStyle(fontSize: 16, color: AppTheme.textSecondary),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return ListView.builder(
+                    itemCount: transactions.length,
+                    itemBuilder: (context, index) {
+                      final transaction = transactions[index];
+                      final amountColor = _getAmountColor(transaction.amount);
+                      final icon = _getTransactionIcon(transaction.transactionType);
+                      
+                      // Calculate running balance (going backwards from current)
+                      // Note: This logic assumes the list is ordered DESC by date (newest first)
+                      // Current Balance is the end state.
+                      // Balance at index i = Balance at index (i-1) - Amount at index (i-1)
+                      // Actually, simpler: 
+                      // Balance AFTER this transaction = Correct? No.
+                      // Let's rely on the customer's *current* balance and backtrack.
+                      // Current Customer Balance (Live)
+                      double runningBalance = widget.customer.balance;
+                      
+                      // Subtract amounts of all NEWER transactions (indices 0 to index-1)
+                      for (int i = 0; i < index; i++) {
+                        runningBalance -= transactions[i].amount;
+                      }
+                      
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: amountColor.withValues(alpha: 0.2),
+                            child: Icon(icon, color: amountColor, size: 20),
+                          ),
+                          title: Text(
+                            transaction.description,
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                          subtitle: Text(
+                            DateFormat('dd MMM yyyy, hh:mm a').format(transaction.createdAt),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          trailing: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              Icon(Icons.history, size: 64, color: AppTheme.textHint),
-                              SizedBox(height: 16),
                               Text(
-                                'No transaction history',
-                                style: TextStyle(fontSize: 16, color: AppTheme.textSecondary),
+                                '${transaction.amount >= 0 ? '+' : ''}₹${transaction.amount.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: amountColor,
+                                ),
+                              ),
+                              Text(
+                                'Bal: ₹${runningBalance.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppTheme.textSecondary,
+                                ),
                               ),
                             ],
                           ),
-                        )
-                      : ListView.builder(
-                          itemCount: _transactions!.length,
-                          itemBuilder: (context, index) {
-                            final transaction = _transactions![index];
-                            final amountColor = _getAmountColor(transaction.amount);
-                            final icon = _getTransactionIcon(transaction.transactionType);
-                            
-                            // Calculate running balance (going backwards from current)
-                            double runningBalance = widget.customer.balance;
-                            for (int i = 0; i < index; i++) {
-                              runningBalance -= _transactions![i].amount;
-                            }
-                            
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              child: ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: amountColor.withValues(alpha: 0.2),
-                                  child: Icon(icon, color: amountColor, size: 20),
-                                ),
-                                title: Text(
-                                  transaction.description,
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                                subtitle: Text(
-                                  DateFormat('dd MMM yyyy, hh:mm a').format(transaction.createdAt),
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                                trailing: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      '${transaction.amount >= 0 ? '+' : ''}₹${transaction.amount.toStringAsFixed(2)}',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: amountColor,
-                                      ),
-                                    ),
-                                    Text(
-                                      'Bal: ₹${runningBalance.toStringAsFixed(2)}',
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: AppTheme.textSecondary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
                         ),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
             const SizedBox(height: 16),
             TextButton(

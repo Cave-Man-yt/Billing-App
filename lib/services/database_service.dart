@@ -268,7 +268,22 @@ class DatabaseService {
 
   Future<int> createCustomer(Customer customer) async {
     final db = await database;
-    return await db.insert('customers', customer.toMap());
+    return await db.transaction((txn) async {
+      final customerId = await txn.insert('customers', customer.toMap());
+
+      // If opening balance > 0, record it as a transaction
+      if (customer.balance > 0) {
+        await txn.insert('balance_transactions', {
+          'customer_id': customerId,
+          'amount': customer.balance,
+          'description': 'Opening Balance',
+          'transaction_type': 'adjustment',
+          'bill_id': null,
+          'created_at': customer.createdAt.toIso8601String(),
+        });
+      }
+      return customerId;
+    });
   }
 
   Future<List<Customer>> getAllCustomers() async {
@@ -541,14 +556,23 @@ class DatabaseService {
       
       if (originalData.isNotEmpty) {
         final originalBill = Bill.fromMap(originalData.first);
-        final delta = bill.newBalance - originalBill.newBalance;
+        
+        // Calculate the actual impact on customer balance (Amount owed - Amount paid)
+        final oldImpact = originalBill.total - originalBill.amountPaid;
+        final newImpact = bill.total - bill.amountPaid;
+        
+        // The delta is the difference in impact
+        // e.g. Old: Total 200, Paid 150 -> Impact +50
+        //      New: Total 250, Paid 150 -> Impact +100
+        //      Delta: 100 - 50 = +50 (Increase in debt)
+        final delta = newImpact - oldImpact;
         
         // If there's a balance change, add adjustment transaction
         if (delta.abs() > 0.01 && bill.customerId != null) {
           await txn.insert('balance_transactions', {
             'customer_id': bill.customerId,
             'amount': delta,
-            'description': 'Adjustment for edited bill ${bill.billNumber}: ₹${delta.toStringAsFixed(2)}',
+            'description': 'Adjustment for edited bill ${bill.billNumber}: ${delta >= 0 ? '+' : ''}₹${delta.toStringAsFixed(2)}',
             'transaction_type': 'adjustment',
             'bill_id': bill.id,
             'created_at': DateTime.now().toIso8601String(),

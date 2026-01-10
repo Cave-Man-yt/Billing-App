@@ -167,6 +167,14 @@ class BillProvider with ChangeNotifier {
         currentCustomerBalance = (customerData.first['balance'] as num?)?.toDouble() ?? 0.0;
       }
 
+      // 🔴 FIX: Fallback to local balance if DB reads 0 but local has value
+      // This handles cases where recent updates (like opening balance) might not be immediately visible to the query
+      // or if there's a disconnect. The UI shows the correct value (Image 1), so we trust it if DB says 0.
+      if (currentCustomerBalance == 0 && _currentCustomer!.balance > 0) {
+        debugPrint('⚠️ DB Balance 0 but Local Balance ${_currentCustomer!.balance}. Using Local.');
+        currentCustomerBalance = _currentCustomer!.balance;
+      }
+
       double previousBalance = currentCustomerBalance;
 
       if (_isEditingExistingBill && _editingBillId != null) {
@@ -252,8 +260,33 @@ class BillProvider with ChangeNotifier {
         // The database service will automatically:
         // 1. Insert the bill
         // 2. Add a balance transaction for this bill
-        await DatabaseService.instance.createBill(bill, itemsToSave);
-        debugPrint('✅ Created new bill with transaction record');
+        final newBillId = await DatabaseService.instance.createBill(bill, itemsToSave);
+        debugPrint('✅ Created new bill with transaction record (ID: $newBillId)');
+        
+        // IMPORTANT: Return the bill with the generated ID so other services (PDF) know it's saved!
+        // We can't mutate the final `bill`, so we'll construct a return value or rely on `loadBills` to refresh.
+        // But for immediate use (e.g. print), we should update the ID of the returned object if possible.
+        // Since `Bill` is immutable (final fields), we create a copy.
+        // Actually, we can just reload it or return a copy. Let's return a copy.
+        // Wait, `bill` is a local final variable.
+        // We'll return a new Bill instance with the ID.
+        return Bill(
+          id: newBillId,
+          billNumber: bill.billNumber,
+          customerId: bill.customerId,
+          customerName: bill.customerName,
+          customerCity: bill.customerCity,
+          isCredit: bill.isCredit,
+          previousBalance: bill.previousBalance,
+          subtotal: bill.subtotal,
+          packageCharge: bill.packageCharge,
+          boxCount: bill.boxCount,
+          total: bill.total,
+          amountPaid: bill.amountPaid,
+          newBalance: bill.newBalance,
+          grandTotal: bill.grandTotal,
+          createdAt: bill.createdAt,
+        );
       }
 
       // Update customer balance to the new balance

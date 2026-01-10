@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../models/bill_model.dart';
 import '../models/bill_item_model.dart';
 import '../providers/settings_provider.dart';
+import 'database_service.dart';
 
 enum PdfPageSize { a4, a5 }
 
@@ -19,10 +20,7 @@ class PdfService {
   static pw.Font get bold => pw.Font.helveticaBold();
 
   // Store user's preference (defaults to A5 for wholesale)
-  static PdfPageSize _preferredSize = PdfPageSize.a5;
-  
-  static PdfPageSize get preferredSize => _preferredSize;
-  static set preferredSize(PdfPageSize size) => _preferredSize = size;
+  static PdfPageSize preferredSize = PdfPageSize.a5;
 
   static PdfPageFormat _getPageFormat(PdfPageSize size) {
     switch (size) {
@@ -55,7 +53,9 @@ class PdfService {
             ListTile(
               leading: Radio<PdfPageSize>(
                 value: PdfPageSize.a5,
-                groupValue: _preferredSize,
+                // ignore: deprecated_member_use
+                groupValue: PdfService.preferredSize,
+                // ignore: deprecated_member_use
                 onChanged: (_) {},
               ),
               title: const Text('A5 (148mm × 210mm)'),
@@ -65,7 +65,9 @@ class PdfService {
             ListTile(
               leading: Radio<PdfPageSize>(
                 value: PdfPageSize.a4,
-                groupValue: _preferredSize,
+                // ignore: deprecated_member_use
+                groupValue: PdfService.preferredSize,
+                // ignore: deprecated_member_use
                 onChanged: (_) {},
               ),
               title: const Text('A4 (210mm × 297mm)'),
@@ -86,7 +88,7 @@ class PdfService {
     if (selectedSize == null || !context.mounted) return;
 
     // Remember user's choice
-    _preferredSize = selectedSize;
+    PdfService.preferredSize = selectedSize;
 
     try {
       final bytes = await _buildPdfBytes(context, bill, items, selectedSize);
@@ -131,7 +133,9 @@ class PdfService {
             ListTile(
               leading: Radio<PdfPageSize>(
                 value: PdfPageSize.a5,
-                groupValue: _preferredSize,
+                // ignore: deprecated_member_use
+                groupValue: PdfService.preferredSize,
+                // ignore: deprecated_member_use
                 onChanged: (_) {},
               ),
               title: const Text('A5 (148mm × 210mm)'),
@@ -141,7 +145,9 @@ class PdfService {
             ListTile(
               leading: Radio<PdfPageSize>(
                 value: PdfPageSize.a4,
-                groupValue: _preferredSize,
+                // ignore: deprecated_member_use
+                groupValue: PdfService.preferredSize,
+                // ignore: deprecated_member_use
                 onChanged: (_) {},
               ),
               title: const Text('A4 (210mm × 297mm)'),
@@ -162,7 +168,7 @@ class PdfService {
     if (selectedSize == null || !context.mounted) return;
 
     // Remember user's choice
-    _preferredSize = selectedSize;
+    PdfService.preferredSize = selectedSize;
 
     final bytes = await _buildPdfBytes(context, bill, items, selectedSize);
     final finalFilename = filename ?? '${bill.billNumber}_${selectedSize.name.toUpperCase()}.pdf';
@@ -177,6 +183,38 @@ class PdfService {
     PdfPageSize pageSize,
   ) async {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
+    
+    // FETCH CURRENT BALANCE LOGIC
+    // We override historical values with current customer state for reprints
+    double displayPreviousBalance = bill.previousBalance;
+    double displayGrandTotal = bill.grandTotal;
+    double displayNewBalance = bill.newBalance;
+
+    if (bill.customerId != null) {
+      try {
+        final dbCustomer = await DatabaseService.instance.getCustomerById(bill.customerId!);
+        if (dbCustomer != null) {
+          // Rule: Previous Balance = Current Customer Balance
+          displayPreviousBalance = dbCustomer.balance;
+          
+          // CRITICAL FIX: If the bill has been saved (has ID), the DB balance 
+          // ALREADY INCLUDES this bill's impact. We must subtract it to show pre-bill state.
+          // If bill.id is null (Estimate/Preview), the DB balance does NOT include it yet.
+          if (bill.id != null) {
+             final billImpact = bill.total - bill.amountPaid;
+             displayPreviousBalance = dbCustomer.balance - billImpact;
+          }
+          
+          // Rule: Grand Total = Previous + Current Bill Total
+          displayGrandTotal = displayPreviousBalance + bill.total;
+          // Rule: New Balance = Grand Total - Amount Paid
+          displayNewBalance = displayGrandTotal - bill.amountPaid;
+        }
+      } catch (e) {
+        debugPrint('Error fetching current balance for PDF: $e');
+      }
+    }
+
     final pdf = pw.Document();
 
     // Adjust font sizes based on page size
@@ -322,16 +360,16 @@ class PdfService {
                     pw.Divider(),
                     _summaryRow('Bill Total:', bill.total.toStringAsFixed(2), bold: true, fontSize: normalSize + 1),
                     pw.SizedBox(height: 5),
-                    _summaryRow('Previous Balance:', bill.previousBalance.toStringAsFixed(2), fontSize: normalSize),
+                    _summaryRow('Previous Balance:', displayPreviousBalance.toStringAsFixed(2), fontSize: normalSize),
                     _summaryRow(
                       'Grand Total:',
-                      (bill.grandTotal > 0 ? bill.grandTotal : bill.previousBalance + bill.total).toStringAsFixed(2),
+                      displayGrandTotal.toStringAsFixed(2),
                       bold: true,
                       fontSize: normalSize + 1,
                     ),
                     pw.Divider(),
                     _summaryRow('Amount Paid:', bill.amountPaid.toStringAsFixed(2), fontSize: normalSize),
-                    _summaryRow('Final Balance:', bill.newBalance.toStringAsFixed(2), bold: true, fontSize: normalSize + 1),
+                    _summaryRow('Final Balance:', displayNewBalance.toStringAsFixed(2), bold: true, fontSize: normalSize + 1),
                   ],
                 ),
               ),
