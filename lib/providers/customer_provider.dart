@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import '../models/customer_model.dart';
+import '../models/balance_transaction_model.dart';
 import '../services/database_service.dart';
 
 class CustomerProvider with ChangeNotifier {
@@ -46,6 +47,45 @@ class CustomerProvider with ChangeNotifier {
       await loadCustomers();
     } catch (e) {
       debugPrint('Error updating customer: $e');
+    }
+  }
+
+  Future<void> addPayment(int customerId, double amount, String description) async {
+    try {
+      await DatabaseService.instance.addTransaction(BalanceTransaction(
+        customerId: customerId,
+        amount: -amount, // Payment reduces balance
+        type: 'PAYMENT',
+        description: description,
+      ));
+      await loadCustomers();
+    } catch (e) {
+      debugPrint('Error adding payment: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> addAdjustment(int customerId, double amount, String description) async {
+    try {
+      await DatabaseService.instance.addTransaction(BalanceTransaction(
+        customerId: customerId,
+        amount: amount, // Positive increases balance, negative decreases
+        type: 'ADJUSTMENT',
+        description: description,
+      ));
+      await loadCustomers();
+    } catch (e) {
+      debugPrint('Error adding adjustment: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<BalanceTransaction>> getHistory(int customerId) async {
+    try {
+      return await DatabaseService.instance.getTransactions(customerId);
+    } catch (e) {
+      debugPrint('Error getting history: $e');
+      return [];
     }
   }
 

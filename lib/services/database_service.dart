@@ -1,11 +1,14 @@
 // lib/services/database_service.dart
 
+
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:billing_app/models/bill_model.dart';
 import 'package:billing_app/models/customer_model.dart';
 import 'package:billing_app/models/product_model.dart';
 import 'package:billing_app/models/bill_item_model.dart';
+import 'package:billing_app/models/balance_transaction_model.dart';
 
 /// Singleton database service for managing SQLite operations
 class DatabaseService {
@@ -98,6 +101,31 @@ onOpen: (db) async {
     // ... rest of existing migrations for package_charge, box_count, etc ...
   } catch (e) {
     // ignore
+  }
+
+  // NEW: Create balance_transactions table if not exists
+  try {
+    const createTxnTable = '''
+      CREATE TABLE IF NOT EXISTS balance_transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        transaction_type TEXT NOT NULL,
+        description TEXT,
+        bill_id INTEGER,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
+      )
+    ''';
+    await db.execute(createTxnTable);
+    
+    // Add index if not exists
+    try {
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_txn_customer ON balance_transactions(customer_id, created_at);');
+    } catch (_) {}
+
+  } catch (e) {
+    debugPrint('Error creating balance_transactions table: $e');
   }
 },                                
     );
@@ -250,6 +278,59 @@ onOpen: (db) async {
       where: 'id = ?',
       whereArgs: [customerId],
     );
+  }
+
+  // ==================== TRANSACTION HISTORY OPERATIONS ====================
+
+  /// Add a balance transaction and update customer balance atomically
+  Future<int> addTransaction(BalanceTransaction txn) async {
+    final db = await database;
+    return await db.transaction((t) async {
+      // 1. Insert transaction record
+      final id = await t.insert('balance_transactions', txn.toMap());
+
+      // 2. Update customer balance
+      // We calculate new balance based on the current one + transaction amount
+      // amount > 0 increases balance (Charge), amount < 0 decreases balance (Payment)
+      
+      // Get current balance
+      final custParams = await t.query(
+        'customers', 
+        columns: ['balance'], 
+        where: 'id = ?', 
+        whereArgs: [txn.customerId]
+      );
+      
+      if (custParams.isNotEmpty) {
+        final currentBal = (custParams.first['balance'] as num).toDouble();
+        final newBal = currentBal + txn.amount;
+        
+        await t.update(
+          'customers',
+          {
+            'balance': newBal,
+            'updated_at': DateTime.now().toIso8601String(),
+          },
+          where: 'id = ?',
+          whereArgs: [txn.customerId],
+        );
+      }
+
+      return id;
+    });
+  }
+
+  /// Get transactions for a customer
+  Future<List<BalanceTransaction>> getTransactions(int customerId, {int limit = 100}) async {
+    final db = await database;
+    final result = await db.query(
+      'balance_transactions',
+      where: 'customer_id = ?',
+      whereArgs: [customerId],
+      orderBy: 'created_at DESC',
+      limit: limit,
+    );
+    return result.map((map) => BalanceTransaction.fromMap(map)).toList();
   }
 
   // ==================== PRODUCT OPERATIONS ====================

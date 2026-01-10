@@ -154,7 +154,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     
                     RadioListTile<PdfPageSize>(
                       value: PdfPageSize.a5,
+                      // ignore: deprecated_member_use
                       groupValue: PdfService.preferredSize,
+                      // ignore: deprecated_member_use
                       onChanged: (value) {
                         setState(() {
                           PdfService.preferredSize = value!;
@@ -173,7 +175,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     
                     RadioListTile<PdfPageSize>(
                       value: PdfPageSize.a4,
+                      // ignore: deprecated_member_use
                       groupValue: PdfService.preferredSize,
+                      // ignore: deprecated_member_use
                       onChanged: (value) {
                         setState(() {
                           PdfService.preferredSize = value!;

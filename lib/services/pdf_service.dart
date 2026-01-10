@@ -19,10 +19,7 @@ class PdfService {
   static pw.Font get bold => pw.Font.helveticaBold();
 
   // Store user's preference (defaults to A5 for wholesale)
-  static PdfPageSize _preferredSize = PdfPageSize.a5;
-  
-  static PdfPageSize get preferredSize => _preferredSize;
-  static set preferredSize(PdfPageSize size) => _preferredSize = size;
+  static PdfPageSize preferredSize = PdfPageSize.a5;
 
   static PdfPageFormat _getPageFormat(PdfPageSize size) {
     switch (size) {
@@ -55,7 +52,9 @@ class PdfService {
             ListTile(
               leading: Radio<PdfPageSize>(
                 value: PdfPageSize.a5,
-                groupValue: _preferredSize,
+                // ignore: deprecated_member_use
+                groupValue: preferredSize,
+                // ignore: deprecated_member_use
                 onChanged: (_) {},
               ),
               title: const Text('A5 (148mm × 210mm)'),
@@ -65,7 +64,9 @@ class PdfService {
             ListTile(
               leading: Radio<PdfPageSize>(
                 value: PdfPageSize.a4,
-                groupValue: _preferredSize,
+                // ignore: deprecated_member_use
+                groupValue: preferredSize,
+                // ignore: deprecated_member_use
                 onChanged: (_) {},
               ),
               title: const Text('A4 (210mm × 297mm)'),
@@ -86,7 +87,7 @@ class PdfService {
     if (selectedSize == null || !context.mounted) return;
 
     // Remember user's choice
-    _preferredSize = selectedSize;
+    preferredSize = selectedSize;
 
     try {
       final bytes = await _buildPdfBytes(context, bill, items, selectedSize);
@@ -131,7 +132,9 @@ class PdfService {
             ListTile(
               leading: Radio<PdfPageSize>(
                 value: PdfPageSize.a5,
-                groupValue: _preferredSize,
+                // ignore: deprecated_member_use
+                groupValue: preferredSize,
+                // ignore: deprecated_member_use
                 onChanged: (_) {},
               ),
               title: const Text('A5 (148mm × 210mm)'),
@@ -141,7 +144,9 @@ class PdfService {
             ListTile(
               leading: Radio<PdfPageSize>(
                 value: PdfPageSize.a4,
-                groupValue: _preferredSize,
+                // ignore: deprecated_member_use
+                groupValue: preferredSize,
+                // ignore: deprecated_member_use
                 onChanged: (_) {},
               ),
               title: const Text('A4 (210mm × 297mm)'),
@@ -162,7 +167,7 @@ class PdfService {
     if (selectedSize == null || !context.mounted) return;
 
     // Remember user's choice
-    _preferredSize = selectedSize;
+    preferredSize = selectedSize;
 
     final bytes = await _buildPdfBytes(context, bill, items, selectedSize);
     final finalFilename = filename ?? '${bill.billNumber}_${selectedSize.name.toUpperCase()}.pdf';
