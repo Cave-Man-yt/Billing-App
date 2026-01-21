@@ -7,6 +7,10 @@ import '../models/bill_item_model.dart';
 import '../models/customer_model.dart';
 import '../services/database_service.dart';
 
+/// Manages the state of bills, bill items, and billing calculations.
+/// 
+/// Handles creating new bills, editing existing ones, and calculating totals
+/// including package charges, box counts, and customer balances.
 class BillProvider with ChangeNotifier {
   List<Bill> _bills = [];
   List<BillItem> _currentBillItems = [];
@@ -130,6 +134,12 @@ class BillProvider with ChangeNotifier {
     _editingBillId = null;
   }
 
+  /// Saves the current bill to the database.
+  /// 
+  /// Calculates final balances, updates customer records, and handles both
+  /// new bill creation and existing bill updates.
+  /// 
+  /// [amountPaid] is the amount paid by the customer for this specific bill.
   Future<Bill?> saveBill(
     double amountPaid, {
     bool clearAfterSave = true,

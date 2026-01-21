@@ -103,7 +103,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     try {
       await DatabaseService.instance.deleteCustomer(customer.id!);
       
-      if (!outerContext.mounted) return;
+
 
       // Refresh list
       if (!outerContext.mounted) return;

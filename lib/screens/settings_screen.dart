@@ -129,73 +129,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 16),
             
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Default PDF Size',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Choose your preferred bill size. You can change this anytime when printing.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    RadioListTile<PdfPageSize>(
-                      value: PdfPageSize.a5,
-                      // ignore: deprecated_member_use
-                      groupValue: PdfService.preferredSize,
-                      // ignore: deprecated_member_use
-                      onChanged: (value) {
-                        setState(() {
-                          PdfService.preferredSize = value!;
-                        });
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Default size set to A5'),
-                            duration: Duration(seconds: 1),
-                          ),
-                        );
-                      },
-                      title: const Text('A5 (148mm × 210mm)'),
-                      subtitle: const Text('Recommended for invoices'),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    
-                    RadioListTile<PdfPageSize>(
-                      value: PdfPageSize.a4,
-                      // ignore: deprecated_member_use
-                      groupValue: PdfService.preferredSize,
-                      // ignore: deprecated_member_use
-                      onChanged: (value) {
-                        setState(() {
-                          PdfService.preferredSize = value!;
-                        });
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Default size set to A4'),
-                            duration: Duration(seconds: 1),
-                          ),
-                        );
-                      },
-                      title: const Text('A4 (210mm × 297mm)'),
-                      subtitle: const Text('Standard letter size'),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ],
-                ),
-              ),
+            PdfSettingsCard(
+              onChanged: () => setState(() {}),
             ),
             
             const SizedBox(height: 16),
@@ -214,3 +149,76 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 } 
+class PdfSettingsCard extends StatelessWidget {
+  final VoidCallback onChanged;
+
+  const PdfSettingsCard({super.key, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Default PDF Size',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Choose your preferred bill size. You can change this anytime when printing.',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            RadioListTile<PdfPageSize>(
+              value: PdfPageSize.a5,
+              // ignore: deprecated_member_use
+              groupValue: PdfService.preferredSize,
+              // ignore: deprecated_member_use
+              onChanged: (value) {
+                PdfService.preferredSize = value!;
+                onChanged();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Default size set to A5'),
+                    duration: Duration(seconds: 1),
+                  ),
+                );
+              },
+              title: const Text('A5 (148mm × 210mm)'),
+              subtitle: const Text('Recommended for invoices'),
+              contentPadding: EdgeInsets.zero,
+            ),
+            RadioListTile<PdfPageSize>(
+              value: PdfPageSize.a4,
+              // ignore: deprecated_member_use
+              groupValue: PdfService.preferredSize,
+              // ignore: deprecated_member_use
+              onChanged: (value) {
+                PdfService.preferredSize = value!;
+                onChanged();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Default size set to A4'),
+                    duration: Duration(seconds: 1),
+                  ),
+                );
+              },
+              title: const Text('A4 (210mm × 297mm)'),
+              subtitle: const Text('Standard letter size'),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

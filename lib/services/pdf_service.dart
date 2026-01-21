@@ -19,7 +19,7 @@ class PdfService {
   static pw.Font get bold => pw.Font.helveticaBold();
 
   // Store user's preference (defaults to A5 for wholesale)
-  // Store user's preference (defaults to A5 for wholesale)
+
   static PdfPageSize preferredSize = PdfPageSize.a5;
 
   static PdfPageFormat _getPageFormat(PdfPageSize size) {
