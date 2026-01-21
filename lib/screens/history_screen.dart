@@ -122,13 +122,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
-  // 🔴 FIX: Print/share should NOT load the bill for editing
+  // NOTE: Print/share should NOT load the bill for editing
   Future<void> _printBill(Bill bill) async {
     final billProvider = Provider.of<BillProvider>(context, listen: false);
     final items = await billProvider.getBillItems(bill.id!);
     if (!mounted) return;
 
-    // 🔴 CRITICAL: Do NOT call loadBillForEditing here!
+    // NOTE: Do NOT call loadBillForEditing here!
     // Just generate and print the PDF directly
     await PdfService.generateAndPrintBill(context, bill, items);
   }
@@ -138,7 +138,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final items = await billProvider.getBillItems(bill.id!);
     if (!mounted) return;
 
-    // 🔴 CRITICAL: Do NOT call loadBillForEditing here!
+    // NOTE: Do NOT call loadBillForEditing here!
     // Just share the PDF directly
     await PdfService.shareBill(context, bill, items, filename: '${bill.billNumber}.pdf');
   }

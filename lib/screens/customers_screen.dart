@@ -9,6 +9,8 @@ import '../models/customer_model.dart';
 import '../providers/customer_provider.dart';
 import '../utils/app_theme.dart';
 
+/// Screen for managing the list of customers.
+/// Allows adding, editing, searching, and deleting customers.
 class CustomersScreen extends StatefulWidget {
   const CustomersScreen({super.key});
 
@@ -63,7 +65,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     ).then((_) => _loadCustomers());
   }
 
-  // 🔴 FINAL FIX: No more async gap warnings
+  // NOTE: Prevent async gap warnings by checking mounted state
   Future<void> _deleteCustomer(BuildContext outerContext, Customer customer) async {
     // Check if customer has any bills
     final db = await DatabaseService.instance.database;

@@ -6,6 +6,8 @@ import 'package:billing_app/providers/settings_provider.dart';
 import 'package:billing_app/utils/app_theme.dart';
 import 'package:billing_app/services/pdf_service.dart';
 
+/// Screen for managing application settings.
+/// Includes shop details and print preferences.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 

@@ -293,7 +293,7 @@ void initState() {
             onPressed: () {
   final billProvider = Provider.of<BillProvider>(context, listen: false);
   
-  // 🔴 FULL CLEAR: Remove all traces of the old bill
+  // NOTE: Remove all traces of the old bill
   billProvider.clearCurrentBill();
   
   // Clear text fields manually (extra safety)
@@ -344,7 +344,7 @@ void initState() {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 🔴 MOVED HERE: Customer selector now at top of LEFT panel
+          // NOTE: Customer selector now at top of LEFT panel
           Consumer<BillProvider>(
             builder: (context, billProvider, _) {
               final customer = billProvider.currentCustomer;

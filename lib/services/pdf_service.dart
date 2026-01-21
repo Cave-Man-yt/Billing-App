@@ -12,6 +12,8 @@ import '../providers/settings_provider.dart';
 
 enum PdfPageSize { a4, a5 }
 
+/// Service for generating and printing PDF bills.
+/// Handles page formatting, PDF layout, and printer integration.
 class PdfService {
   PdfService._();
 
