@@ -82,6 +82,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     }
 
     // Show confirmation dialog and get result BEFORE any await
+    if (!outerContext.mounted) return; // Check mounted before showing dialog
     final bool shouldDelete = await showDialog<bool>(
           context: outerContext,
           builder: (dialogContext) => AlertDialog(
@@ -102,6 +103,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
       await DatabaseService.instance.deleteCustomer(customer.id!);
 
       // Refresh list
+      if (!outerContext.mounted) return;
       final customerProvider = Provider.of<CustomerProvider>(outerContext, listen: false);
       await customerProvider.loadCustomers();
       _loadCustomers();

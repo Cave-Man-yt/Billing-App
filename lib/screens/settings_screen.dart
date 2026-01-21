@@ -154,7 +154,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     
                     RadioListTile<PdfPageSize>(
                       value: PdfPageSize.a5,
+                      // ignore: deprecated_member_use
                       groupValue: PdfService.preferredSize,
+                      // ignore: deprecated_member_use
                       onChanged: (value) {
                         setState(() {
                           PdfService.preferredSize = value!;
@@ -167,13 +169,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         );
                       },
                       title: const Text('A5 (148mm × 210mm)'),
-                      subtitle: const Text('Recommended for invoices - saves paper'),
+                      subtitle: const Text('Recommended for invoices'),
                       contentPadding: EdgeInsets.zero,
                     ),
                     
                     RadioListTile<PdfPageSize>(
                       value: PdfPageSize.a4,
+                      // ignore: deprecated_member_use
                       groupValue: PdfService.preferredSize,
+                      // ignore: deprecated_member_use
                       onChanged: (value) {
                         setState(() {
                           PdfService.preferredSize = value!;
@@ -195,27 +199,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             
             const SizedBox(height: 16),
-            
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.accentColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.accentColor.withValues(alpha: 0.3)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.lightbulb_outline, color: AppTheme.accentColor, size: 20),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Tip: A5 is perfect for wholesale bills and uses half the paper!',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),

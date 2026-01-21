@@ -23,7 +23,7 @@ dependencies:
   printing: ^5.11.1
   
   # UI Components
-  intl: ^0.18.1
+  intl: ^0.20.2
   flutter_typeahead: ^5.2.0
   flutter_keyboard_visibility: ^6.0.0
   
@@ -33,8 +33,8 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
-  flutter_launcher_icons: ^0.13.1
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
