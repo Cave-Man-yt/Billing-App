@@ -2,7 +2,6 @@
 import 'package:billing_app/providers/customer_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-
 import '../models/bill_model.dart';
 import '../models/bill_item_model.dart';
 import '../models/customer_model.dart';
@@ -255,5 +254,26 @@ class BillProvider with ChangeNotifier {
   Future<List<Bill>> searchBills(String query) async {
     if (query.isEmpty) return _bills;
     return await DatabaseService.instance.searchBills(query);
+  }
+
+  bool isLatestBill(int billId, int customerId) {
+    // Filter bills for this customer
+    final customerBills = _bills.where((b) => b.customerId == customerId).toList();
+    if (customerBills.isEmpty) return true;
+
+    // Find the bill in question
+    try {
+      final bill = customerBills.firstWhere((b) => b.id == billId);
+      
+      // Check if there are any newer bills (created after this one)
+      // We use isAfter and a small tolerance for safety, but strict comparison should work
+      // effectively checking if ANY bill has createdAt > this bill.
+      final hasNewer = customerBills.any((b) => b.createdAt.isAfter(bill.createdAt));
+      
+      return !hasNewer;
+    } catch (e) {
+      // If bill not found in list (shouldn't happen), assume it's not editable safely
+      return false;
+    }
   }
 }

@@ -87,6 +87,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
   // Load bill for editing and navigate to billing screen
   Future<void> _openBillForEditing(Bill bill) async {
     final billProvider = Provider.of<BillProvider>(context, listen: false);
+    
+    // Check if it's the latest bill
+    if (bill.id != null && bill.customerId != null) {
+      final isLatest = billProvider.isLatestBill(bill.id!, bill.customerId!);
+      if (!isLatest) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Cannot edit old bills. Only the latest bill for a customer can be edited.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
     final items = await billProvider.getBillItems(bill.id!);
     if (!mounted) return;
 
@@ -207,7 +224,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
-                                  '₹${(bill.grandTotal > 0 ? bill.grandTotal : bill.previousBalance + bill.total).toStringAsFixed(2)}',
+                                  '₹${bill.total.toStringAsFixed(2)}',
                                   style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,

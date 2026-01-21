@@ -47,32 +47,34 @@ class PdfService {
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
         title: const Text('Select Print Size'),
-        content: RadioGroup<PdfPageSize>(
-          groupValue: preferredSize,
-          onChanged: (val) {
-             if (val != null) Navigator.pop(dialogContext, val);
-          },
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Radio<PdfPageSize>(
-                  value: PdfPageSize.a5,
-                ),
-                title: const Text('A5 (148mm × 210mm)'),
-                subtitle: const Text('Recommended for invoices'),
-                onTap: () => Navigator.pop(dialogContext, PdfPageSize.a5),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Radio<PdfPageSize>(
+                value: PdfPageSize.a5,
+                // ignore: deprecated_member_use
+                groupValue: preferredSize,
+                // ignore: deprecated_member_use
+                onChanged: (_) {},
               ),
-              ListTile(
-                leading: const Radio<PdfPageSize>(
-                  value: PdfPageSize.a4,
-                ),
-                title: const Text('A4 (210mm × 297mm)'),
-                subtitle: const Text('Standard letter size'),
-                onTap: () => Navigator.pop(dialogContext, PdfPageSize.a4),
+              title: const Text('A5 (148mm × 210mm)'),
+              subtitle: const Text('Recommended for invoices'),
+              onTap: () => Navigator.pop(dialogContext, PdfPageSize.a5),
+            ),
+            ListTile(
+              leading: Radio<PdfPageSize>(
+                value: PdfPageSize.a4,
+                // ignore: deprecated_member_use
+                groupValue: preferredSize,
+                // ignore: deprecated_member_use
+                onChanged: (_) {},
               ),
-            ],
-          ),
+              title: const Text('A4 (210mm × 297mm)'),
+              subtitle: const Text('Standard letter size'),
+              onTap: () => Navigator.pop(dialogContext, PdfPageSize.a4),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -125,32 +127,34 @@ class PdfService {
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
         title: const Text('Select PDF Size'),
-        content: RadioGroup<PdfPageSize>(
-          groupValue: preferredSize,
-          onChanged: (val) {
-             if (val != null) Navigator.pop(dialogContext, val);
-          },
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Radio<PdfPageSize>(
-                  value: PdfPageSize.a5,
-                ),
-                title: const Text('A5 (148mm × 210mm)'),
-                subtitle: const Text('Recommended for invoices'),
-                onTap: () => Navigator.pop(dialogContext, PdfPageSize.a5),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Radio<PdfPageSize>(
+                value: PdfPageSize.a5,
+                // ignore: deprecated_member_use
+                groupValue: preferredSize,
+                // ignore: deprecated_member_use
+                onChanged: (_) {},
               ),
-              ListTile(
-                leading: const Radio<PdfPageSize>(
-                  value: PdfPageSize.a4,
-                ),
-                title: const Text('A4 (210mm × 297mm)'),
-                subtitle: const Text('Standard letter size'),
-                onTap: () => Navigator.pop(dialogContext, PdfPageSize.a4),
+              title: const Text('A5 (148mm × 210mm)'),
+              subtitle: const Text('Recommended for invoices'),
+              onTap: () => Navigator.pop(dialogContext, PdfPageSize.a5),
+            ),
+            ListTile(
+              leading: Radio<PdfPageSize>(
+                value: PdfPageSize.a4,
+                // ignore: deprecated_member_use
+                groupValue: preferredSize,
+                // ignore: deprecated_member_use
+                onChanged: (_) {},
               ),
-            ],
-          ),
+              title: const Text('A4 (210mm × 297mm)'),
+              subtitle: const Text('Standard letter size'),
+              onTap: () => Navigator.pop(dialogContext, PdfPageSize.a4),
+            ),
+          ],
         ),
         actions: [
           TextButton(

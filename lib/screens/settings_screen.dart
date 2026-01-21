@@ -53,24 +53,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _handleSizeChange(PdfPageSize? value) {
-    if (value == null) return;
-    setState(() {
-      PdfService.preferredSize = value;
-    });
-
-    final msg = value == PdfPageSize.a5
-        ? 'Default size set to A5'
-        : 'Default size set to A4';
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        duration: const Duration(seconds: 1),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -147,79 +129,76 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 16),
             
-              Card(
+            Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: RadioGroup<PdfPageSize>(
-                  groupValue: PdfService.preferredSize,
-                  onChanged: _handleSizeChange,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Default PDF Size',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Default PDF Size',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
                       ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Choose your preferred bill size. You can change this anytime when printing.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textSecondary,
-                        ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Choose your preferred bill size. You can change this anytime when printing.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
                       ),
-                      const SizedBox(height: 16),
-                      
-                      ListTile(
-                        leading: const Radio<PdfPageSize>(
-                          value: PdfPageSize.a5,
-                        ),
-                        title: const Text('A5 (148mm × 210mm)'),
-                        subtitle: const Text('Recommended for invoices - saves paper'),
-                        contentPadding: EdgeInsets.zero,
-                        onTap: () => _handleSizeChange(PdfPageSize.a5),
-                      ),
-                      
-                      ListTile(
-                        leading: const Radio<PdfPageSize>(
-                          value: PdfPageSize.a4,
-                        ),
-                        title: const Text('A4 (210mm × 297mm)'),
-                        subtitle: const Text('Standard letter size'),
-                        contentPadding: EdgeInsets.zero,
-                        onTap: () => _handleSizeChange(PdfPageSize.a4),
-                      ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    RadioListTile<PdfPageSize>(
+                      value: PdfPageSize.a5,
+                      // ignore: deprecated_member_use
+                      groupValue: PdfService.preferredSize,
+                      // ignore: deprecated_member_use
+                      onChanged: (value) {
+                        setState(() {
+                          PdfService.preferredSize = value!;
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Default size set to A5'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                      },
+                      title: const Text('A5 (148mm × 210mm)'),
+                      subtitle: const Text('Recommended for invoices'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    
+                    RadioListTile<PdfPageSize>(
+                      value: PdfPageSize.a4,
+                      // ignore: deprecated_member_use
+                      groupValue: PdfService.preferredSize,
+                      // ignore: deprecated_member_use
+                      onChanged: (value) {
+                        setState(() {
+                          PdfService.preferredSize = value!;
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Default size set to A4'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                      },
+                      title: const Text('A4 (210mm × 297mm)'),
+                      subtitle: const Text('Standard letter size'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ],
                 ),
               ),
             ),
             
             const SizedBox(height: 16),
-            
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.accentColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.accentColor.withValues(alpha: 0.3)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.lightbulb_outline, color: AppTheme.accentColor, size: 20),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Tip: A5 is perfect for wholesale bills and uses half the paper!',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
