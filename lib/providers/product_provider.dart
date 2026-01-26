@@ -84,9 +84,17 @@ Future<void> upsertProductPrice(String name, double price) async {
   Future<void> addOrUpdateProduct(Product product) async {
     try {
       await DatabaseService.instance.upsertProduct(product);
-      await loadProducts();
+      final index = _products.indexWhere((p) => p.name == product.name);
+      if (index != -1) {
+        _products[index] = product;
+      } else {
+        _products.add(product);
+      }
+      notifyListeners();
     } catch (e) {
       debugPrint('Error adding/updating product: $e');
+      // Fallback to reload all products in case of error
+      await loadProducts();
     }
   }
 }

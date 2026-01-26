@@ -1,19 +1,22 @@
 // lib/providers/bill_provider.dart
-import 'package:billing_app/providers/customer_provider.dart';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/bill_model.dart';
 import '../models/bill_item_model.dart';
 import '../models/customer_model.dart';
 import '../services/database_service.dart';
+import 'customer_provider.dart'; // Import CustomerProvider
 
 /// Manages the state of bills, bill items, and billing calculations.
-/// 
+///
 /// Handles creating new bills, editing existing ones, and calculating totals
 /// including package charges, box counts, and customer balances.
 /// Provider class for managing Bill state and operations.
 /// Handles loading, creating, updating, and deleting bills.
 class BillProvider with ChangeNotifier {
+  CustomerProvider _customerProvider; // Make it non-final
+
   List<Bill> _bills = [];
   List<BillItem> _currentBillItems = [];
   Customer? _currentCustomer;
@@ -39,9 +42,14 @@ class BillProvider with ChangeNotifier {
   double get subtotal => _currentBillItems.fold(0.0, (sum, item) => sum + item.total);
   double get total => subtotal + _packageCharge;
 
-  BillProvider() {
+  BillProvider(this._customerProvider) {
     loadBills();
   }
+  
+  void update(CustomerProvider customerProvider) {
+    _customerProvider = customerProvider;
+  }
+
 
   /// Loads all bills from the database and updates the state.
   Future<void> loadBills() async {
@@ -138,71 +146,55 @@ class BillProvider with ChangeNotifier {
   }
 
   /// Saves the current bill to the database.
-  /// 
+  ///
   /// Calculates final balances, updates customer records, and handles both
   /// new bill creation and existing bill updates.
-  /// 
+  ///
   /// [amountPaid] is the amount paid by the customer for this specific bill.
   /// Saves the current bill to the database.
-  /// 
+  ///
   /// If [amountPaid] is provided, it calculates the new balance.
   /// [clearAfterSave] determines if the current bill state should be reset after saving.
-  Future<Bill?> saveBill(
-    double amountPaid, {
+  Future<Bill?> saveBill({
+    required double amountPaid,
     bool clearAfterSave = true,
-    CustomerProvider? customerProvider,
-  }) async {
-    if (_currentBillItems.isEmpty) return null;
-    if (_currentCustomer == null) return null;
+  }) async { // Removed onCustomerUpdate
+    if (_currentBillItems.isEmpty || _currentCustomer == null) {
+      return null;
+    }
 
     try {
       final db = await DatabaseService.instance.database;
-      
-      // NOTE: Always get the CURRENT customer balance from DB
+
       final customerData = await db.query(
         'customers',
         where: 'id = ?',
         whereArgs: [_currentCustomer!.id],
         limit: 1,
       );
-      
+
       double currentCustomerBalance = 0.0;
       if (customerData.isNotEmpty) {
-        currentCustomerBalance = (customerData.first['balance'] as num?)?.toDouble() ?? 0.0;
+        currentCustomerBalance =
+            (customerData.first['balance'] as num?)?.toDouble() ?? 0.0;
       }
 
       double previousBalance = currentCustomerBalance;
 
       if (_isEditingExistingBill && _editingBillId != null) {
-        // NOTE: When editing, we need to "undo" the effect of the old bill first
-        final originalBill = _bills.firstWhere((b) => b.id == _editingBillId);
-
-        // Calculate what the balance was BEFORE the original bill was created
-        // Original bill added: (originalBill.newBalance - originalBill.previousBalance) to customer
-        // So to undo it: currentBalance - (newBalance - previousBalance) of original
-        final originalBillEffect = originalBill.newBalance - originalBill.previousBalance;
-        previousBalance = roundMoney(currentCustomerBalance - originalBillEffect);
-
-        debugPrint('🔧 Editing bill ${originalBill.billNumber}:');
-        debugPrint('   Current customer balance in DB: $currentCustomerBalance');
-        debugPrint('   Original bill effect: $originalBillEffect (${originalBill.previousBalance} → ${originalBill.newBalance})');
-        debugPrint('   Restored previous balance: $previousBalance');
+        final originalBill =
+            _bills.firstWhere((b) => b.id == _editingBillId);
+        // The original bill's effect on balance should be reversed
+        // to get the balance *before* that bill was applied.
+        final originalBillImpact = originalBill.newBalance - originalBill.previousBalance;
+        previousBalance = roundMoney(currentCustomerBalance - originalBillImpact);
       } else {
-        // NOTE: For new bills, previous balance is simply the current customer balance
         previousBalance = currentCustomerBalance;
-        debugPrint('💚 New bill - using current customer balance as previous: $previousBalance');
       }
 
       final grandTotal = roundMoney(total + previousBalance);
       final newBalance = roundMoney(grandTotal - amountPaid);
       final bool willBeCredit = newBalance > 0.01;
-
-      debugPrint('📊 Bill calculation:');
-      debugPrint('   Bill total: $total');
-      debugPrint('   Previous balance: $previousBalance');
-      debugPrint('   Grand total: $grandTotal');
-      debugPrint('   Amount paid: $amountPaid');
-      debugPrint('   New balance: $newBalance');
 
       final bill = Bill(
         id: _isEditingExistingBill ? _editingBillId : null,
@@ -224,31 +216,42 @@ class BillProvider with ChangeNotifier {
       );
 
       final itemsToSave = List<BillItem>.from(_currentBillItems);
+      int savedBillId;
 
       if (_isEditingExistingBill && bill.id != null) {
         await DatabaseService.instance.updateBill(bill, itemsToSave);
-        debugPrint('✅ Updated existing bill');
+        savedBillId = bill.id!;
+        final index = _bills.indexWhere((b) => b.id == bill.id);
+        if (index != -1) {
+          _bills[index] = bill;
+        }
       } else {
-        await DatabaseService.instance.createBill(bill, itemsToSave);
-        debugPrint('✅ Created new bill');
+        savedBillId = await DatabaseService.instance.createBill(bill, itemsToSave);
+        _bills.insert(0, bill.copyWith(id: savedBillId));
       }
 
-      // NOTE: Update customer balance to the new balance
+      // Update customer balance and record history via CustomerProvider
       if (_currentCustomer!.id != null) {
-        await DatabaseService.instance.updateCustomerBalance(_currentCustomer!.id!, newBalance);
-        debugPrint('💾 Updated customer balance in DB to: $newBalance');
+        final balanceChange = newBalance - currentCustomerBalance;
+        String description = _isEditingExistingBill
+            ? 'Bill #${bill.billNumber} (Updated)'
+            : 'Bill #${bill.billNumber}';
+
+        await _customerProvider.updateCustomerBalance(
+          _currentCustomer!.id!,
+          newBalance,
+          description,
+          billId: savedBillId,
+        );
       }
 
-      if (customerProvider != null) {
-        await customerProvider.refresh();
-      }
-
-      await loadBills();
       if (clearAfterSave) {
         clearCurrentBill();
       }
       clearEditingMode();
-      return bill;
+
+      notifyListeners();
+      return bill.copyWith(id: savedBillId);
     } catch (e) {
       debugPrint('❌ Error saving bill: $e');
       rethrow;

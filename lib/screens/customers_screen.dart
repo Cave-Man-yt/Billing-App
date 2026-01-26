@@ -8,6 +8,7 @@ import 'package:sqflite/sqflite.dart';
 import '../models/customer_model.dart';
 import '../providers/customer_provider.dart';
 import '../utils/app_theme.dart';
+import 'customer_balance_history_screen.dart';
 
 /// Screen for managing the list of customers.
 /// Allows adding, editing, searching, and deleting customers.
@@ -63,6 +64,15 @@ class _CustomersScreenState extends State<CustomersScreen> {
       context: context,
       builder: (_) => EditBalanceDialog(customer: customer),
     ).then((_) => _loadCustomers());
+  }
+
+  void _showBalanceHistoryDialog(BuildContext context, Customer customer) {
+    showDialog(
+      context: context,
+      builder: (_) => CustomerBalanceHistoryScreen(
+        customer: customer,
+      ),
+    ).then((_) => _loadCustomers()); // Refresh customers when returning
   }
 
   // NOTE: Prevent async gap warnings by checking mounted state
@@ -189,7 +199,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     final hasBalance = customer.balance > 0;
                     return Card(
                       child: ListTile(
-                        onTap: () => _showEditBalanceDialog(context, customer),
                         onLongPress: () => _deleteCustomer(context, customer),
                         leading: CircleAvatar(
                           backgroundColor: hasBalance ? AppTheme.warningColor : AppTheme.accentColor,
@@ -210,10 +219,26 @@ class _CustomersScreenState extends State<CustomersScreen> {
                               ),
                           ],
                         ),
-                        isThreeLine: hasBalance,
-                        trailing: hasBalance
-                            ? const Icon(Icons.account_balance_wallet, color: AppTheme.warningColor)
-                            : null,
+                        isThreeLine: hasBalance && customer.city != null,
+                        trailing: Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (hasBalance)
+                                IconButton(
+                                  icon: const Icon(Icons.account_balance_wallet, color: AppTheme.warningColor),
+                                  onPressed: () => _showEditBalanceDialog(context, customer),
+                                  tooltip: 'Edit Balance',
+                                ),
+                              IconButton(
+                                icon: const Icon(Icons.history),
+                                onPressed: () => _showBalanceHistoryDialog(context, customer),
+                                tooltip: 'View History',
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     );
                   },
@@ -343,16 +368,17 @@ class _EditBalanceDialogState extends State<EditBalanceDialog> {
 
   Future<void> _updateBalance() async {
     final newBalance = double.tryParse(_balanceController.text) ?? 0.0;
-    final updatedCustomer = widget.customer.copyWith(
-      balance: newBalance,
-      updatedAt: DateTime.now(),
-    );
-
+    
     final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
 
-    await customerProvider.updateCustomer(updatedCustomer);
+    // Use the new updateCustomerBalance to record history
+    await customerProvider.updateCustomerBalance(
+      widget.customer.id!,
+      newBalance,
+      'Manual balance adjustment', // Description for manual update
+    );
     if (!mounted) return;
 
     navigator.pop();

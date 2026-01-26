@@ -143,7 +143,7 @@ void initState() {
 
   Future<void> _completeAndPrint() async {
     final billProvider = Provider.of<BillProvider>(context, listen: false);
-    final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+
 
     if (billProvider.currentBillItems.isEmpty) {
       if (mounted) {
@@ -170,9 +170,8 @@ void initState() {
 
       final itemsCopy = List<BillItem>.from(billProvider.currentBillItems);
       final bill = await billProvider.saveBill(
-        amountPaid,
+        amountPaid: amountPaid,
         clearAfterSave: false,
-        customerProvider: customerProvider,
       );
 
       if (bill == null || !mounted) return;
@@ -205,7 +204,7 @@ void initState() {
 
   Future<void> _shareViaWhatsApp() async {
     final billProvider = Provider.of<BillProvider>(context, listen: false);
-    final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+
 
     if (billProvider.currentBillItems.isEmpty || billProvider.currentCustomer == null) {
       if (mounted) {
@@ -224,9 +223,8 @@ void initState() {
 
       final itemsCopy = List<BillItem>.from(billProvider.currentBillItems);
       final bill = await billProvider.saveBill(
-        amountPaid,
+        amountPaid: amountPaid,
         clearAfterSave: false,
-        customerProvider: customerProvider,
       );
 
       if (bill == null || !mounted) return;

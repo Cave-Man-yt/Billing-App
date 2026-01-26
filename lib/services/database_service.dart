@@ -6,6 +6,7 @@ import 'package:billing_app/models/bill_model.dart';
 import 'package:billing_app/models/customer_model.dart';
 import 'package:billing_app/models/product_model.dart';
 import 'package:billing_app/models/bill_item_model.dart';
+import 'package:billing_app/models/balance_history_model.dart'; // Import BalanceHistory
 
 /// Singleton database service for managing SQLite operations
 class DatabaseService {
@@ -28,82 +29,94 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2, // Increment database version
       onCreate: _createDB,
-      // In the openDatabase onOpen callback, add this migration:
-onOpen: (db) async {
-  // Existing customer migrations...
-  try {
-    final cols = await db.rawQuery("PRAGMA table_info(customers);");
-    final names = cols.map((r) => r['name'] as String).toSet();
-    if (!names.contains('city')) {
-      await db.execute("ALTER TABLE customers ADD COLUMN city TEXT;");
-    }
-    if (!names.contains('balance')) {
-      await db.execute("ALTER TABLE customers ADD COLUMN balance REAL DEFAULT 0.0;");
-      if (names.contains('current_credit')) {
-        await db.execute('UPDATE customers SET balance = current_credit;');
-      }
-    }
-  } catch (e) {
-    // ignore
-  }
-  
-  // NEW: Migrate discount to package_charge
-  try {
-    final billCols = await db.rawQuery("PRAGMA table_info(bills);");
-    final billNames = billCols.map((r) => r['name'] as String).toSet();
-    
-    // If old discount column exists, rename it to package_charge
-    if (billNames.contains('discount') && !billNames.contains('package_charge')) {
-      // SQLite doesn't support RENAME COLUMN in older versions, so we migrate data
-      await db.execute("ALTER TABLE bills ADD COLUMN package_charge REAL DEFAULT 0.0;");
-      await db.execute('UPDATE bills SET package_charge = discount;');
-      // Note: We keep the old discount column for compatibility
-    } else if (!billNames.contains('package_charge')) {
-      await db.execute("ALTER TABLE bills ADD COLUMN package_charge REAL DEFAULT 0.0;");
-    }
+      onUpgrade: _onUpgrade, // Add onUpgrade callback
+      onOpen: (db) async {
+        // Existing customer migrations (from version 1 or earlier)...
+        try {
+          final cols = await db.rawQuery("PRAGMA table_info(customers);");
+          final names = cols.map((r) => r['name'] as String).toSet();
+          if (!names.contains('city')) {
+            await db.execute("ALTER TABLE customers ADD COLUMN city TEXT;");
+          }
+          // The 'balance' column should already be handled by _createDB or _onUpgrade for newer versions
+          // For older dbs migrating to v1 then to v2, this ensures balance exists before we use it.
+          if (!names.contains('balance')) {
+            await db.execute("ALTER TABLE customers ADD COLUMN balance REAL DEFAULT 0.0;");
+            if (names.contains('current_credit')) { // If an old column 'current_credit' exists
+              await db.execute('UPDATE customers SET balance = current_credit;');
+            }
+          }
+        } catch (e) {
+          // ignore - likely column already exists or table doesn't exist yet (handled by onCreate)
+        }
+        
+        // Existing bill migrations (from version 1 or earlier)...
+        try {
+          final billCols = await db.rawQuery("PRAGMA table_info(bills);");
+          final billNames = billCols.map((r) => r['name'] as String).toSet();
+          
+          if (billNames.contains('discount') && !billNames.contains('package_charge')) {
+            await db.execute("ALTER TABLE bills ADD COLUMN package_charge REAL DEFAULT 0.0;");
+            await db.execute('UPDATE bills SET package_charge = discount;');
+          } else if (!billNames.contains('package_charge')) {
+            await db.execute("ALTER TABLE bills ADD COLUMN package_charge REAL DEFAULT 0.0;");
+          }
 
-    if(!billNames.contains('box_count')) {
-      await db.execute("ALTER TABLE bills ADD COLUMN box_count INTEGER DEFAULT 0;");
-    }
-    
-    if (!billNames.contains('customer_city')) {
-      await db.execute("ALTER TABLE bills ADD COLUMN customer_city TEXT;");
-    }
-    if (!billNames.contains('customer_phone')) {
-      await db.execute("ALTER TABLE bills ADD COLUMN customer_phone TEXT;");
-    }
-    if (!billNames.contains('customer_address')) {
-      await db.execute("ALTER TABLE bills ADD COLUMN customer_address TEXT;");
-    }
-  } catch (e) {
-    // ignore
-  }
-
-  try {
-    final billCols = await db.rawQuery("PRAGMA table_info(bills);");
-    final billNames = billCols.map((r) => r['name'] as String).toSet();
-    
-    if (!billNames.contains('amount_paid')) {
-      await db.execute("ALTER TABLE bills ADD COLUMN amount_paid REAL DEFAULT 0.0;");
-    }
-    if (!billNames.contains('previous_balance')) {
-      await db.execute("ALTER TABLE bills ADD COLUMN previous_balance REAL DEFAULT 0.0;");
-    }
-    if (!billNames.contains('new_balance')) {
-      await db.execute("ALTER TABLE bills ADD COLUMN new_balance REAL DEFAULT 0.0;");
-    }
-    
-    // ... rest of existing migrations for package_charge, box_count, etc ...
-  } catch (e) {
-    // ignore
-  }
-},                                
+          if(!billNames.contains('box_count')) {
+            await db.execute("ALTER TABLE bills ADD COLUMN box_count INTEGER DEFAULT 0;");
+          }
+          
+          if (!billNames.contains('customer_city')) {
+            await db.execute("ALTER TABLE bills ADD COLUMN customer_city TEXT;");
+          }
+          if (!billNames.contains('customer_phone')) {
+            await db.execute("ALTER TABLE bills ADD COLUMN customer_phone TEXT;");
+          }
+          if (!billNames.contains('customer_address')) {
+            await db.execute("ALTER TABLE bills ADD COLUMN customer_address TEXT;");
+          }
+          if (!billNames.contains('amount_paid')) {
+            await db.execute("ALTER TABLE bills ADD COLUMN amount_paid REAL DEFAULT 0.0;");
+          }
+          if (!billNames.contains('previous_balance')) {
+            await db.execute("ALTER TABLE bills ADD COLUMN previous_balance REAL DEFAULT 0.0;");
+          }
+          if (!billNames.contains('new_balance')) {
+            await db.execute("ALTER TABLE bills ADD COLUMN new_balance REAL DEFAULT 0.0;");
+          }
+        } catch (e) {
+          // ignore
+        }
+      },
     );
   }
 
-  /// Create all database tables
+  /// Handle database upgrades
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    // This example assumes a linear upgrade path.
+    // For more complex migrations, a switch statement on oldVersion is typical.
+    if (oldVersion < 2) {
+      // Add balance_history table if it doesn't exist
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS balance_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer_id INTEGER NOT NULL,
+          bill_id INTEGER,
+          amount REAL NOT NULL,
+          description TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE,
+          FOREIGN KEY (bill_id) REFERENCES bills (id) ON DELETE SET NULL
+        )
+      ''');
+    }
+    // Add other upgrade scripts for future versions here
+    // if (oldVersion < 3) { ... }
+  }
+
+  /// Create all database tables (called only on first creation of DB)
   Future<void> _createDB(Database db, int version) async {
     // Customers table (simple: name, city, balance)
     await db.execute('''
@@ -147,7 +160,7 @@ onOpen: (db) async {
         previous_balance REAL DEFAULT 0.0,
         new_balance REAL DEFAULT 0.0,
         created_at TEXT NOT NULL,
-        FOREIGN KEY (customer_id) REFERENCES customers (id)
+        FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE SET NULL
       )
     ''');
 
@@ -161,6 +174,20 @@ onOpen: (db) async {
         price REAL NOT NULL,
         total REAL NOT NULL,
         FOREIGN KEY (bill_id) REFERENCES bills (id) ON DELETE CASCADE
+      )
+    ''');
+
+    // Balance History table
+    await db.execute('''
+      CREATE TABLE balance_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER NOT NULL,
+        bill_id INTEGER,
+        amount REAL NOT NULL,
+        description TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE,
+        FOREIGN KEY (bill_id) REFERENCES bills (id) ON DELETE SET NULL
       )
     ''');
 
@@ -308,60 +335,59 @@ onOpen: (db) async {
   // ==================== BILL OPERATIONS ====================
 
   /// Create a new bill with items
-  /// Create a new bill with items
-/// If this is called for "editing" an old bill, we create a NEW bill (fresh billId)
-/// Old items are not relevant since we're always creating fresh records
-Future<int> createBill(Bill bill, List<BillItem> items) async {
-  final db = await database;
-  return await db.transaction((txn) async {
-    // Insert the bill row → get fresh billId
-    final billId = await txn.insert('bills', bill.toMap());
+  /// If this is called for "editing" an old bill, we create a NEW bill (fresh billId)
+  /// Old items are not relevant since we're always creating fresh records
+  Future<int> createBill(Bill bill, List<BillItem> items) async {
+    final db = await database;
+    return await db.transaction((txn) async {
+      // Insert the bill row → get fresh billId
+      final billId = await txn.insert('bills', bill.toMap());
 
-    // NO NEED to delete old items — we're creating a completely new bill
-    // (If you ever implement true "update existing bill", then add delete here)
+      // NO NEED to delete old items — we're creating a completely new bill
+      // (If you ever implement true "update existing bill", then add delete here)
 
-    // Insert fresh bill items — NEVER pass 'id' so SQLite auto-generates
-    for (var item in items) {
-      await txn.insert(
-        'bill_items',
-        item.toMap(billId),  // ← This must NOT contain 'id' key
-        // Optional: explicitly null out id to be 100% safe
-        // conflictAlgorithm: ConflictAlgorithm.replace, // not needed
-      );
-
-      // Upsert product (fast suggestions + price memory)
-      final existing = await txn.query(
-        'products',
-        where: 'name = ?',
-        whereArgs: [item.productName],
-      );
-
-      if (existing.isNotEmpty) {
-        final existingProduct = Product.fromMap(existing.first);
-        await txn.update(
-          'products',
-          {
-            'price': item.price,
-            'last_used': DateTime.now().toIso8601String(),
-            'usage_count': existingProduct.usageCount + 1,
-          },
-          where: 'id = ?',
-          whereArgs: [existingProduct.id],
-        );
-      } else {
+      // Insert fresh bill items — NEVER pass 'id' so SQLite auto-generates
+      for (var item in items) {
         await txn.insert(
-          'products',
-          Product(
-            name: item.productName,
-            price: item.price,
-          ).toMap(),
+          'bill_items',
+          item.toMap(billId),  // ← This must NOT contain 'id' key
+          // Optional: explicitly null out id to be 100% safe
+          // conflictAlgorithm: ConflictAlgorithm.replace, // not needed
         );
-      }
-    }
 
-    return billId;
-  });
-}
+        // Upsert product (fast suggestions + price memory)
+        final existing = await txn.query(
+          'products',
+          where: 'name = ?',
+          whereArgs: [item.productName],
+        );
+
+        if (existing.isNotEmpty) {
+          final existingProduct = Product.fromMap(existing.first);
+          await txn.update(
+            'products',
+            {
+              'price': item.price,
+              'last_used': DateTime.now().toIso8601String(),
+              'usage_count': existingProduct.usageCount + 1,
+            },
+            where: 'name = ?',
+            whereArgs: [existingProduct.id],
+          );
+        } else {
+          await txn.insert(
+            'products',
+            Product(
+              name: item.productName,
+              price: item.price,
+            ).toMap(),
+          );
+        }
+      }
+
+      return billId;
+    });
+  }
 
   /// Get all bills
   Future<List<Bill>> getAllBills() async {
@@ -405,6 +431,26 @@ Future<int> createBill(Bill bill, List<BillItem> items) async {
     return result.map((map) => Bill.fromMap(map)).toList();
   }
 
+  // ==================== BALANCE HISTORY OPERATIONS ====================
+
+  /// Create a new balance history record
+  Future<int> createBalanceHistory(BalanceHistory history) async {
+    final db = await database;
+    return await db.insert('balance_history', history.toMap());
+  }
+
+  /// Get all balance history records for a customer
+  Future<List<BalanceHistory>> getBalanceHistoryForCustomer(int customerId) async {
+    final db = await database;
+    final result = await db.query(
+      'balance_history',
+      where: 'customer_id = ?',
+      whereArgs: [customerId],
+      orderBy: 'created_at DESC',
+    );
+    return result.map((map) => BalanceHistory.fromMap(map)).toList();
+  }
+
   // ==================== SETTINGS OPERATIONS ====================
 
   /// Get shop settings
@@ -439,45 +485,46 @@ Future<int> createBill(Bill bill, List<BillItem> items) async {
   }
 
   /// Update an existing bill — overwrites bill row and replaces all items
-Future<void> updateBill(Bill bill, List<BillItem> items) async {
-  final db = await database;
-  await db.transaction((txn) async {
-    // Update the bill row
-    await txn.update(
-      'bills',
-      bill.toMap(),
-      where: 'id = ?',
-      whereArgs: [bill.id],
-    );
-
-    // Delete old items
-    await txn.delete('bill_items', where: 'bill_id = ?', whereArgs: [bill.id]);
-
-    // Insert new items with same bill_id
-    for (var item in items) {
-      await txn.insert('bill_items', item.toMap(bill.id!));
-      
-      // Upsert product (same as create)
-      final existing = await txn.query(
-        'products',
-        where: 'name = ?',
-        whereArgs: [item.productName],
+  Future<void> updateBill(Bill bill, List<BillItem> items) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      // Update the bill row
+      await txn.update(
+        'bills',
+        bill.toMap(),
+        where: 'id = ?',
+        whereArgs: [bill.id],
       );
-      if (existing.isNotEmpty) {
-        final existingProduct = Product.fromMap(existing.first);
-        await txn.update(
+
+      // Delete old items
+      await txn.delete('bill_items', where: 'bill_id = ?', whereArgs: [bill.id]);
+
+      // Insert new items with same bill_id
+      for (var item in items) {
+        await txn.insert('bill_items', item.toMap(bill.id!));
+        
+        // Upsert product (same as create)
+        final existing = await txn.query(
           'products',
-          {
-            'price': item.price,
-            'last_used': DateTime.now().toIso8601String(),
-            'usage_count': existingProduct.usageCount + 1,
-          },
-          where: 'id = ?',
-          whereArgs: [existingProduct.id],
+          where: 'name = ?',
+          whereArgs: [item.productName],
         );
-      } else {
-        await txn.insert('products', Product(name: item.productName, price: item.price).toMap());
+        if (existing.isNotEmpty) {
+          final existingProduct = Product.fromMap(existing.first);
+          await txn.update(
+            'products',
+            {
+              'price': item.price,
+              'last_used': DateTime.now().toIso8601String(),
+              'usage_count': existingProduct.usageCount + 1,
+            },
+            where: 'name = ?',
+            whereArgs: [existingProduct.id],
+          );
+        } else {
+          await txn.insert('products', Product(name: item.productName, price: item.price).toMap());
+        }
       }
-    }
-  });
-}}
+    });
+  }
+}

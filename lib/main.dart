@@ -37,7 +37,13 @@ class WholesaleBillingApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ChangeNotifierProvider(create: (_) => CustomerProvider()),
         ChangeNotifierProvider(create: (_) => ProductProvider()),
-        ChangeNotifierProvider(create: (_) => BillProvider()),
+        ChangeNotifierProxyProvider<CustomerProvider, BillProvider>(
+          create: (context) => BillProvider(
+            Provider.of<CustomerProvider>(context, listen: false),
+          ),
+          update: (context, customerProvider, billProvider) =>
+              billProvider!..update(customerProvider),
+        ),
       ],
       child: Consumer<SettingsProvider>(
         builder: (context, settings, _) {

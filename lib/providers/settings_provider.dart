@@ -47,28 +47,19 @@ class SettingsProvider with ChangeNotifier {
     String? email,
     double? taxPercentage,
   }) async {
-    final updates = <String, dynamic>{};
-    
-    if (name != null) {
-      _shopName = name;
-      updates['shop_name'] = name;
-    }
-    if (address != null) {
-      _shopAddress = address;
-      updates['shop_address'] = address;
-    }
-    if (phone != null) {
-      _shopPhone = phone;
-      updates['shop_phone'] = phone;
-    }
-    if (email != null) {
-      _shopEmail = email;
-      updates['shop_email'] = email;
-    }
-    if (taxPercentage != null) {
-      _taxPercentage = taxPercentage;
-      updates['tax_percentage'] = taxPercentage;
-    }
+    _shopName = name ?? _shopName;
+    _shopAddress = address ?? _shopAddress;
+    _shopPhone = phone ?? _shopPhone;
+    _shopEmail = email ?? _shopEmail;
+    _taxPercentage = taxPercentage ?? _taxPercentage;
+
+    final updates = {
+      if (name != null) 'shop_name': name,
+      if (address != null) 'shop_address': address,
+      if (phone != null) 'shop_phone': phone,
+      if (email != null) 'shop_email': email,
+      if (taxPercentage != null) 'tax_percentage': taxPercentage,
+    };
 
     if (updates.isNotEmpty) {
       await DatabaseService.instance.updateSettings(updates);
