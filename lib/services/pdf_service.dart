@@ -1,6 +1,6 @@
 // lib/services/pdf_service.dart
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -31,8 +31,8 @@ class PdfService {
       case PdfPageSize.a5:
         // A5 is exactly half of A4: 148mm x 210mm
         return const PdfPageFormat(
-          148 * PdfPageFormat.mm,  // width
-          210 * PdfPageFormat.mm,  // height
+          148 * PdfPageFormat.mm, // width
+          210 * PdfPageFormat.mm, // height
           marginAll: 10 * PdfPageFormat.mm,
         );
     }
@@ -173,9 +173,26 @@ class PdfService {
     preferredSize = selectedSize;
 
     final bytes = await _buildPdfBytes(context, bill, items, selectedSize);
-    final finalFilename = filename ?? '${bill.billNumber}_${selectedSize.name.toUpperCase()}.pdf';
-    
+    final finalFilename =
+        filename ?? '${bill.billNumber}_${selectedSize.name.toUpperCase()}.pdf';
+
     await Printing.sharePdf(bytes: bytes, filename: finalFilename);
+  }
+
+  static Future<List<Uint8List>> generateBillAsImages(
+    BuildContext context,
+    Bill bill,
+    List<BillItem> items,
+  ) async {
+    final pdfBytes = await _buildPdfBytes(context, bill, items, preferredSize);
+
+    // Convert PDF pages to images
+    // Rasterize returns a Stream of PdfRaster
+    final images = <Uint8List>[];
+    await for (final page in Printing.raster(pdfBytes, dpi: 200)) {
+      images.add(await page.toPng());
+    }
+    return images;
   }
 
   static Future<Uint8List> _buildPdfBytes(
@@ -195,12 +212,25 @@ class PdfService {
     final tableHeaderSize = isA5 ? 9.0 : 11.0;
     final tableDataSize = isA5 ? 8.0 : 10.0;
 
+    // Load Om symbol
+    final omSymbolImage = pw.MemoryImage(
+      (await rootBundle.load('assets/images/om_symbol.png'))
+          .buffer
+          .asUint8List(),
+    );
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: _getPageFormat(pageSize),
         theme: pw.ThemeData.withFont(base: regular, bold: bold),
         build: (pw.Context ctx) {
           return [
+            // Om Symbol
+            pw.Container(
+              alignment: pw.Alignment.center,
+              padding: const pw.EdgeInsets.only(bottom: 10),
+              child: pw.Image(omSymbolImage, height: 40, width: 40),
+            ),
             // Header
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -292,11 +322,23 @@ class PdfService {
                 pw.TableRow(
                   decoration: const pw.BoxDecoration(color: PdfColors.grey300),
                   children: [
-                    _cell('S.No', header: true, align: pw.TextAlign.center, fontSize: tableHeaderSize),
+                    _cell('S.No',
+                        header: true,
+                        align: pw.TextAlign.center,
+                        fontSize: tableHeaderSize),
                     _cell('Item', header: true, fontSize: tableHeaderSize),
-                    _cell('Qty', header: true, align: pw.TextAlign.center, fontSize: tableHeaderSize),
-                    _cell('Price', header: true, align: pw.TextAlign.right, fontSize: tableHeaderSize),
-                    _cell('Total', header: true, align: pw.TextAlign.right, fontSize: tableHeaderSize),
+                    _cell('Qty',
+                        header: true,
+                        align: pw.TextAlign.center,
+                        fontSize: tableHeaderSize),
+                    _cell('Price',
+                        header: true,
+                        align: pw.TextAlign.right,
+                        fontSize: tableHeaderSize),
+                    _cell('Total',
+                        header: true,
+                        align: pw.TextAlign.right,
+                        fontSize: tableHeaderSize),
                   ],
                 ),
                 // Data rows
@@ -304,11 +346,15 @@ class PdfService {
                   final index = entry.key;
                   final item = entry.value;
                   return pw.TableRow(children: [
-                    _cell('${index + 1}', align: pw.TextAlign.center, fontSize: tableDataSize),
+                    _cell('${index + 1}',
+                        align: pw.TextAlign.center, fontSize: tableDataSize),
                     _cell(item.productName, fontSize: tableDataSize),
-                    _cell(item.quantity.toStringAsFixed(0), align: pw.TextAlign.center, fontSize: tableDataSize),
-                    _cell(item.price.toStringAsFixed(2), align: pw.TextAlign.right, fontSize: tableDataSize),
-                    _cell(item.total.toStringAsFixed(2), align: pw.TextAlign.right, fontSize: tableDataSize),
+                    _cell(item.quantity.toStringAsFixed(0),
+                        align: pw.TextAlign.center, fontSize: tableDataSize),
+                    _cell(item.price.toStringAsFixed(2),
+                        align: pw.TextAlign.right, fontSize: tableDataSize),
+                    _cell(item.total.toStringAsFixed(2),
+                        align: pw.TextAlign.right, fontSize: tableDataSize),
                   ]);
                 }),
               ],
@@ -322,24 +368,35 @@ class PdfService {
                 width: isA5 ? 180 : 250,
                 child: pw.Column(
                   children: [
-                    _summaryRow('Subtotal:', bill.subtotal.toStringAsFixed(2), fontSize: normalSize),
+                    _summaryRow('Subtotal:', bill.subtotal.toStringAsFixed(2),
+                        fontSize: normalSize),
                     if (bill.packageCharge > 0)
-                      _summaryRow('Package Charge:', '+${bill.packageCharge.toStringAsFixed(2)}', fontSize: normalSize),
+                      _summaryRow('Package Charge:',
+                          '+${bill.packageCharge.toStringAsFixed(2)}',
+                          fontSize: normalSize),
                     if (bill.boxCount > 0)
-                      _summaryRow('No. of Boxes:', '${bill.boxCount}', fontSize: normalSize),
+                      _summaryRow('No. of Boxes:', '${bill.boxCount}',
+                          fontSize: normalSize),
                     pw.Divider(),
-                    _summaryRow('Bill Total:', bill.total.toStringAsFixed(2), bold: true, fontSize: normalSize + 1),
+                    _summaryRow('Bill Total:', bill.total.toStringAsFixed(2),
+                        bold: true, fontSize: normalSize + 1),
                     pw.SizedBox(height: 5),
-                    _summaryRow('Previous Balance:', bill.previousBalance.toStringAsFixed(2), fontSize: normalSize),
+                    _summaryRow('Previous Balance:',
+                        bill.displayPreviousBalance.toStringAsFixed(2),
+                        fontSize: normalSize),
                     _summaryRow(
                       'Grand Total:',
-                      (bill.grandTotal > 0 ? bill.grandTotal : bill.previousBalance + bill.total).toStringAsFixed(2),
+                      bill.displayGrandTotal.toStringAsFixed(2),
                       bold: true,
                       fontSize: normalSize + 1,
                     ),
                     pw.Divider(),
-                    _summaryRow('Amount Paid:', bill.amountPaid.toStringAsFixed(2), fontSize: normalSize),
-                    _summaryRow('Final Balance:', bill.newBalance.toStringAsFixed(2), bold: true, fontSize: normalSize + 1),
+                    _summaryRow(
+                        'Amount Paid:', bill.amountPaid.toStringAsFixed(2),
+                        fontSize: normalSize),
+                    _summaryRow('Final Balance:',
+                        bill.displayNewBalance.toStringAsFixed(2),
+                        bold: true, fontSize: normalSize + 1),
                   ],
                 ),
               ),

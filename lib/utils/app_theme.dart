@@ -20,6 +20,7 @@ class AppTheme {
   static const Color successColor = Color(0xFF10B981);
   static const Color errorColor = Color(0xFFEF4444);
   static const Color warningColor = Color(0xFFF59E0B);
+  static const Color borderColor = Color(0xFFE2E8F0);
 
   static final ThemeData lightTheme = ThemeData(
     useMaterial3: true,
@@ -54,7 +55,8 @@ class AppTheme {
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
     ),
     textTheme: const TextTheme(
-      titleLarge: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: textPrimary),
+      titleLarge: TextStyle(
+          fontSize: 20, fontWeight: FontWeight.w600, color: textPrimary),
       bodyLarge: TextStyle(color: textPrimary),
       bodyMedium: TextStyle(color: textSecondary),
     ),

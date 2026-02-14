@@ -24,11 +24,18 @@ dependencies:
   
   # UI Components
   intl: ^0.20.2
+  collection: ^1.17.0
   flutter_typeahead: ^5.2.0
   flutter_keyboard_visibility: ^6.0.0
   
   # Icons
   cupertino_icons: ^1.0.2
+
+  # Sharing
+  share_plus: ^7.2.2
+  screenshot: ^3.0.0
+  file_picker: ^8.0.0
+  permission_handler: ^11.0.0
 
 dev_dependencies:
   flutter_test:
@@ -41,6 +48,8 @@ flutter:
   assets:
     - assets/fonts/NotoSans-Regular.ttf
     - assets/fonts/NotoSans-Bold.ttf
+    - assets/images/om_symbol.png
+    - assets/images/
   fonts:
     - family: NotoSans
       fonts:

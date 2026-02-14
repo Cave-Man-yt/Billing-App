@@ -18,6 +18,9 @@ class Customer {
   })  : createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now();
 
+  // Helper to ensure we never display negative balance (credit) as negative
+  double get displayBalance => balance < 0 ? 0.0 : balance;
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,

@@ -6,6 +6,8 @@ import '../providers/bill_provider.dart';
 import '../models/bill_model.dart';
 import '../utils/app_theme.dart';
 import '../services/pdf_service.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:collection/collection.dart';
 import '../services/database_service.dart';
 import 'home_screen.dart';
 
@@ -138,9 +140,28 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final items = await billProvider.getBillItems(bill.id!);
     if (!mounted) return;
 
-    // NOTE: Do NOT call loadBillForEditing here!
-    // Just share the PDF directly
-    await PdfService.shareBill(context, bill, items, filename: '${bill.billNumber}.pdf');
+    final images = await PdfService.generateBillAsImages(context, bill, items);
+    
+    if (images.isNotEmpty) {
+       final xFiles = images.mapIndexed((index, bytes) {
+        return XFile.fromData(
+          bytes,
+          name: '${bill.billNumber}_page_${index + 1}.png',
+          mimeType: 'image/png',
+        );
+      }).toList();
+
+      await Share.shareXFiles(xFiles, text: 'Bill No: ${bill.billNumber}');
+    } else {
+       if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to generate bill image'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    }
   }
 
   @override

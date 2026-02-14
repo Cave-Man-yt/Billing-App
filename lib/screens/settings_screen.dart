@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:billing_app/providers/settings_provider.dart';
 import 'package:billing_app/utils/app_theme.dart';
 import 'package:billing_app/services/pdf_service.dart';
+import 'package:billing_app/services/backup_service.dart';
 
 /// Screen for managing application settings.
 /// Includes shop details and print preferences.
@@ -120,6 +121,61 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             
+            const SizedBox(height: 32),
+            const Divider(),
+            const SizedBox(height: 16),
+            
+            // Backup & Restore Section
+            Text(
+              'Data Backup & Restore',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const CircleAvatar(
+                        backgroundColor: AppTheme.accentColor,
+                        child: Icon(Icons.download, color: Colors.white),
+                      ),
+                      title: const Text('Export Database'),
+                      subtitle: const Text('Backup your data to a file'),
+                      onTap: () async {
+                        // Show loading
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (ctx) => const Center(child: CircularProgressIndicator()),
+                        );
+                        
+                        await BackupService.backupData(context);
+                        
+                        // Hide loading
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                        }
+                      },
+                    ),
+                    const Divider(),
+                    ListTile(
+                      leading: const CircleAvatar(
+                        backgroundColor: AppTheme.warningColor,
+                        child: Icon(Icons.upload, color: Colors.white),
+                      ),
+                      title: const Text('Restore Database'),
+                      subtitle: const Text('Import data from a backup file'),
+                      onTap: () async {
+                        await BackupService.restoreData(context);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
             const SizedBox(height: 32),
             const Divider(),
             const SizedBox(height: 16),

@@ -12,6 +12,8 @@ import '../models/bill_model.dart';
 import '../utils/app_theme.dart';
 import '../widgets/customer_selector.dart';
 import '../services/pdf_service.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:collection/collection.dart';
 
 class BillingScreen extends StatefulWidget {
   const BillingScreen({super.key});
@@ -231,26 +233,42 @@ void initState() {
 
       if (bill == null || !mounted) return;
 
-      await PdfService.shareBill(
-        context,
-        bill,
-        itemsCopy,
-        filename: '${bill.billNumber}.pdf',
-      );
+      final images = await PdfService.generateBillAsImages(context, bill, itemsCopy);
+
+      if (images.isNotEmpty) {
+        final xFiles = images.mapIndexed((index, bytes) {
+          return XFile.fromData(
+            bytes,
+            name: '${bill.billNumber}_page_${index + 1}.png',
+            mimeType: 'image/png',
+          );
+        }).toList();
+
+        await Share.shareXFiles(xFiles, text: 'Bill No: ${bill.billNumber}');
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Bill saved & sent to WhatsApp!'),
+              backgroundColor: AppTheme.successColor,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to generate bill images'),
+              backgroundColor: AppTheme.errorColor,
+            ),
+          );
+        }
+      }
 
       billProvider.clearCurrentBill();
       _packageChargeController.clear();
       _boxCountController.clear();
       _amountPaidController.clear();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Bill saved & sent to WhatsApp!'),
-            backgroundColor: AppTheme.successColor,
-          ),
-        );
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -687,6 +705,13 @@ void initState() {
               elevation: 2,
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: AppTheme.primaryColor,
+                  child: Text(
+                    '${index + 1}',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                ),
                 onTap: () => _editItem(index, item),
                 title: Text(item.productName, style: const TextStyle(fontWeight: FontWeight.w600)),
                 subtitle: Text('${item.quantity} × ${item.price.toStringAsFixed(2)}'),

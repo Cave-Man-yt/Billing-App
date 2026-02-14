@@ -37,6 +37,18 @@ class Bill {
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
+  // Helpers for UI/Print display - strictly non-negative
+  double get displayPreviousBalance =>
+      previousBalance < 0 ? 0.0 : previousBalance;
+  double get displayNewBalance => newBalance < 0 ? 0.0 : newBalance;
+
+  // For Grand Total, if the calculation (Total + Prev Balance) is negative
+  // (meaning they had huge credit), we display 0 to indicate they owe nothing.
+  double get displayGrandTotal {
+    final calculated = total + previousBalance;
+    return calculated < 0 ? 0.0 : calculated;
+  }
+
   Bill copyWith({
     int? id,
     String? billNumber,
@@ -85,9 +97,9 @@ class Bill {
       'package_charge': packageCharge,
       'box_count': boxCount,
       'total': total,
-      'amount_paid': amountPaid,           // ← ADD THIS
-      'previous_balance': previousBalance,  // ← ADD THIS
-      'new_balance': newBalance,           // ← ADD THIS
+      'amount_paid': amountPaid, // ← ADD THIS
+      'previous_balance': previousBalance, // ← ADD THIS
+      'new_balance': newBalance, // ← ADD THIS
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -108,7 +120,7 @@ class Bill {
       amountPaid: (map['amount_paid'] as num?)?.toDouble() ?? 0.0,
       previousBalance: (map['previous_balance'] as num?)?.toDouble() ?? 0.0,
       newBalance: (map['new_balance'] as num?)?.toDouble() ?? 0.0,
-      grandTotal: 0.0,  // This can be calculated on the fly
+      grandTotal: 0.0, // This can be calculated on the fly
       createdAt: DateTime.parse(map['created_at'] as String),
     );
   }

@@ -8,6 +8,7 @@ import 'package:sqflite/sqflite.dart';
 import '../models/customer_model.dart';
 import '../providers/customer_provider.dart';
 import '../utils/app_theme.dart';
+import 'customer_ledger_screen.dart';
 
 /// Screen for managing the list of customers.
 /// Allows adding, editing, searching, and deleting customers.
@@ -29,14 +30,16 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   void _loadCustomers() {
-    final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+    final customerProvider =
+        Provider.of<CustomerProvider>(context, listen: false);
     setState(() {
       _filteredCustomers = customerProvider.customers;
     });
   }
 
   void _searchCustomers(String query) async {
-    final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+    final customerProvider =
+        Provider.of<CustomerProvider>(context, listen: false);
     if (query.isEmpty) {
       setState(() {
         _filteredCustomers = customerProvider.customers;
@@ -66,7 +69,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   // NOTE: Prevent async gap warnings by checking mounted state
-  Future<void> _deleteCustomer(BuildContext outerContext, Customer customer) async {
+  Future<void> _deleteCustomer(
+      BuildContext outerContext, Customer customer) async {
     // Check if customer has any bills
     final db = await DatabaseService.instance.database;
     final billCountResult = await db.rawQuery(
@@ -74,12 +78,13 @@ class _CustomersScreenState extends State<CustomersScreen> {
       [customer.id],
     );
     final count = Sqflite.firstIntValue(billCountResult) ?? 0;
-    
+
     if (!outerContext.mounted) return;
 
     if (count > 0) {
       ScaffoldMessenger.of(outerContext).showSnackBar(
-        const SnackBar(content: Text('Cannot delete customer with existing bills')),
+        const SnackBar(
+            content: Text('Cannot delete customer with existing bills')),
       );
       return;
     }
@@ -90,10 +95,15 @@ class _CustomersScreenState extends State<CustomersScreen> {
           context: outerContext,
           builder: (dialogContext) => AlertDialog(
             title: const Text('Delete Customer'),
-            content: const Text('Are you sure you want to delete this customer? This action cannot be undone.'),
+            content: const Text(
+                'Are you sure you want to delete this customer? This action cannot be undone.'),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
-              ElevatedButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Delete')),
+              TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancel')),
+              ElevatedButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: const Text('Delete')),
             ],
           ),
         ) ??
@@ -104,12 +114,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
     try {
       await DatabaseService.instance.deleteCustomer(customer.id!);
-      
-
 
       // Refresh list
       if (!outerContext.mounted) return;
-      final customerProvider = Provider.of<CustomerProvider>(outerContext, listen: false);
+      final customerProvider =
+          Provider.of<CustomerProvider>(outerContext, listen: false);
       await customerProvider.loadCustomers();
       _loadCustomers();
 
@@ -136,7 +145,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
-              Provider.of<CustomerProvider>(context, listen: false).loadCustomers();
+              Provider.of<CustomerProvider>(context, listen: false)
+                  .loadCustomers();
               _loadCustomers();
             },
           ),
@@ -171,18 +181,23 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.people_outline, size: 80, color: AppTheme.textHint),
+                        const Icon(Icons.people_outline,
+                            size: 80, color: AppTheme.textHint),
                         const SizedBox(height: 16),
                         Text(
-                          _searchController.text.isEmpty ? 'No customers yet' : 'No customers found',
-                          style: const TextStyle(fontSize: 18, color: AppTheme.textSecondary),
+                          _searchController.text.isEmpty
+                              ? 'No customers yet'
+                              : 'No customers found',
+                          style: const TextStyle(
+                              fontSize: 18, color: AppTheme.textSecondary),
                         ),
                       ],
                     ),
                   );
                 }
                 return ListView.builder(
-                  padding: const EdgeInsets.only(left: 16, right: 16, bottom: 80),
+                  padding:
+                      const EdgeInsets.only(left: 16, right: 16, bottom: 80),
                   itemCount: _filteredCustomers.length,
                   itemBuilder: (context, index) {
                     final customer = _filteredCustomers[index];
@@ -192,28 +207,57 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         onTap: () => _showEditBalanceDialog(context, customer),
                         onLongPress: () => _deleteCustomer(context, customer),
                         leading: CircleAvatar(
-                          backgroundColor: hasBalance ? AppTheme.warningColor : AppTheme.accentColor,
+                          backgroundColor: hasBalance
+                              ? AppTheme.warningColor
+                              : AppTheme.accentColor,
                           child: Text(
                             customer.name[0].toUpperCase(),
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold),
                           ),
                         ),
-                        title: Text(customer.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        title: Text(customer.name,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w600)),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             if (customer.city != null) Text(customer.city!),
                             if (hasBalance)
                               Text(
-                                'Balance: ₹${customer.balance.toStringAsFixed(2)}',
-                                style: const TextStyle(color: AppTheme.warningColor, fontWeight: FontWeight.w600),
+                                'Balance: ₹${customer.displayBalance.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  color: customer.balance > 0
+                                      ? AppTheme.errorColor
+                                      : AppTheme.successColor,
+                                ),
                               ),
                           ],
                         ),
                         isThreeLine: hasBalance,
-                        trailing: hasBalance
-                            ? const Icon(Icons.account_balance_wallet, color: AppTheme.warningColor)
-                            : null,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.only(right: 8.0),
+                              child: Icon(Icons.account_balance_wallet,
+                                  color: AppTheme.warningColor),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.history,
+                                  color: AppTheme.primaryColor),
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) =>
+                                      CustomerLedgerDialog(customer: customer),
+                                ).then((_) =>
+                                    _loadCustomers()); // Refresh when closed
+                              },
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -257,11 +301,14 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
     }
     final customer = Customer(
       name: _nameController.text.trim(),
-      city: _cityController.text.trim().isEmpty ? null : _cityController.text.trim(),
+      city: _cityController.text.trim().isEmpty
+          ? null
+          : _cityController.text.trim(),
       balance: double.tryParse(_balanceController.text) ?? 0.0,
     );
 
-    final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+    final customerProvider =
+        Provider.of<CustomerProvider>(context, listen: false);
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
 
@@ -288,14 +335,16 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
           children: [
             TextField(
               controller: _nameController,
-              decoration: const InputDecoration(labelText: 'Customer Name *', prefixIcon: Icon(Icons.person)),
+              decoration: const InputDecoration(
+                  labelText: 'Customer Name *', prefixIcon: Icon(Icons.person)),
               textCapitalization: TextCapitalization.words,
               autofocus: true,
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _cityController,
-              decoration: const InputDecoration(labelText: 'City', prefixIcon: Icon(Icons.location_city)),
+              decoration: const InputDecoration(
+                  labelText: 'City', prefixIcon: Icon(Icons.location_city)),
               textCapitalization: TextCapitalization.words,
             ),
             const SizedBox(height: 16),
@@ -306,14 +355,19 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
                 prefixIcon: Icon(Icons.account_balance_wallet),
                 hintText: '0.00',
               ),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))
+              ],
             ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
         ElevatedButton(onPressed: _addCustomer, child: const Text('Add')),
       ],
     );
@@ -348,7 +402,8 @@ class _EditBalanceDialogState extends State<EditBalanceDialog> {
       updatedAt: DateTime.now(),
     );
 
-    final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+    final customerProvider =
+        Provider.of<CustomerProvider>(context, listen: false);
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
 
@@ -373,13 +428,19 @@ class _EditBalanceDialogState extends State<EditBalanceDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(widget.customer.city ?? 'No city', style: const TextStyle(color: AppTheme.textSecondary)),
+            Text(widget.customer.city ?? 'No city',
+                style: const TextStyle(color: AppTheme.textSecondary)),
             const SizedBox(height: 24),
             TextField(
               controller: _balanceController,
-              decoration: const InputDecoration(labelText: 'Balance (₹)', prefixIcon: Icon(Icons.account_balance_wallet)),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+              decoration: const InputDecoration(
+                  labelText: 'Balance (₹)',
+                  prefixIcon: Icon(Icons.account_balance_wallet)),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))
+              ],
               autofocus: true,
             ),
             const SizedBox(height: 16),
@@ -391,7 +452,8 @@ class _EditBalanceDialogState extends State<EditBalanceDialog> {
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.info_outline, color: AppTheme.warningColor, size: 20),
+                  Icon(Icons.info_outline,
+                      color: AppTheme.warningColor, size: 20),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -406,7 +468,9 @@ class _EditBalanceDialogState extends State<EditBalanceDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
         ElevatedButton(onPressed: _updateBalance, child: const Text('Update')),
       ],
     );

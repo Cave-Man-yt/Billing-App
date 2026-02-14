@@ -6,6 +6,7 @@ import 'package:billing_app/models/bill_model.dart';
 import 'package:billing_app/models/customer_model.dart';
 import 'package:billing_app/models/product_model.dart';
 import 'package:billing_app/models/bill_item_model.dart';
+import 'package:billing_app/models/payment_model.dart';
 
 /// Singleton database service for managing SQLite operations
 class DatabaseService {
@@ -99,7 +100,22 @@ onOpen: (db) async {
   } catch (e) {
     // ignore
   }
-},                                
+    // NEW: Payments table migration (Simplified & Robust)
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS payments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer_id INTEGER NOT NULL,
+          amount REAL NOT NULL,
+          date TEXT NOT NULL,
+          notes TEXT,
+          FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
+        )
+      ''');
+    } catch (e) {
+      // ignore
+    }
+  },
     );
   }
 
@@ -186,6 +202,18 @@ onOpen: (db) async {
       'tax_percentage': 0.0,
       'updated_at': DateTime.now().toIso8601String(),
     });
+
+    // Payments table
+    await db.execute('''
+      CREATE TABLE payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        date TEXT NOT NULL,
+        notes TEXT,
+        FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
+      )
+    ''');
   }
 
   // ==================== CUSTOMER OPERATIONS ====================
@@ -480,4 +508,50 @@ Future<void> updateBill(Bill bill, List<BillItem> items) async {
       }
     }
   });
-}}
+}
+  // ==================== PAYMENT OPERATIONS ====================
+
+  /// Add a payment record and update customer balance
+  Future<int> addPayment(Payment payment) async {
+    final db = await database;
+    return await db.transaction((txn) async {
+      // Insert payment
+      final id = await txn.insert('payments', payment.toMap());
+
+      // Update customer balance (deduct payment)
+      // Logic: Balance = Total Debts - Total Payments
+      // But we store current balance.
+      // So New Balance = Old Balance - Payment Amount
+      
+      final customer = await txn.query('customers', where: 'id = ?', whereArgs: [payment.customerId]);
+      if (customer.isNotEmpty) {
+        final currentBalance = customer.first['balance'] as double;
+        final newBalance = currentBalance - payment.amount;
+        
+        await txn.update(
+          'customers',
+          {
+            'balance': newBalance,
+            'updated_at': DateTime.now().toIso8601String(),
+          },
+          where: 'id = ?',
+          whereArgs: [payment.customerId],
+        );
+      }
+
+      return id;
+    });
+  }
+
+  /// Get payments for a specific customer
+  Future<List<Payment>> getCustomerPayments(int customerId) async {
+    final db = await database;
+    final result = await db.query(
+      'payments',
+      where: 'customer_id = ?',
+      whereArgs: [customerId],
+      orderBy: 'date DESC',
+    );
+    return result.map((map) => Payment.fromMap(map)).toList();
+  }
+}
